@@ -74,8 +74,17 @@
   .rsel:hover,.rsel:focus{background-color:var(--accent);color:#0b0d12}
   .rsel option{background:var(--panel2);color:var(--text);font-weight:400}
   .icon-btn.pin.on{color:var(--accent);background:var(--accent-soft)}
-  .sb-foot{border-top:1px solid var(--border);padding:5px 8px;font-size:.66rem;color:var(--faint);
-    display:flex;justify-content:space-between;align-items:center}
+  .sb-foot{border-top:1px solid var(--border);padding:5px 8px;font-size:.66rem;color:var(--faint)}
+  .sb-foot .row1{display:flex;justify-content:space-between;align-items:center}
+  .sb-hint{font-size:.6rem;color:var(--faint);margin-top:3px;opacity:.8}
+  /* hover preview of the rendered prompt (sidebar) */
+  #sbPreview{position:fixed;left:5px;right:5px;z-index:60;background:var(--panel2);
+    border:1px solid var(--border2);border-radius:8px;padding:8px 10px;
+    font-family:Consolas,monospace;font-size:.68rem;line-height:1.5;color:#c6cdd9;
+    white-space:pre-wrap;overflow:hidden;max-height:45vh;pointer-events:none;
+    box-shadow:0 10px 28px rgba(0,0,0,.55)}
+  #sbPreview .pv-title{font-family:"Segoe UI",system-ui,sans-serif;font-size:.64rem;font-weight:600;
+    color:var(--accent);margin-bottom:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .kbd{background:var(--panel3);border:1px solid var(--border2);border-bottom-width:2px;border-radius:4px;
     padding:0 4px;font-size:.62rem;color:var(--muted);font-family:Consolas,monospace}
 
@@ -377,6 +386,7 @@ const T = {
   duplicate:"Duplikovat", raw:"— bez vyplnění (raw)", copied:"Zkopírováno do schránky",
   copiedWith:"Zkopírováno — recept „{0}“", copiedRaw:"Zkopírováno — raw text",
   copiedChain:"Ve schránce {0} promptů za sebou (Shift+klik přidává další)",
+  sbShiftHint:"Shift+klik na kopírovat řadí prompty do schránky za sebe",
   saved:"Uloženo ✓", recipeSaved:"Recept uložen ✓", orderSaved:"Pořadí uloženo",
   variables:"Proměnné", varAuto:"klik vloží · ✕ smazat · dvojklik přejmenovat · + přidat",
   varDrop:"přetažením vložíte proměnnou do receptu",
@@ -527,9 +537,13 @@ function renderSidebar(){
     <div class="sb-search"><input id="sbSearch" type="text" placeholder="${T.search}" value="${esc(sbFilter)}"></div>
     <div id="sbList"></div>
     <div class="sb-foot">
-      <span id="sbCount"></span>
-      <span>${(S.settings.shortcut||"ctrl+alt+p").split("+").map(k=>`<span class="kbd">${esc(k)}</span>`).join("+")}</span>
+      <div class="row1">
+        <span id="sbCount"></span>
+        <span>${(S.settings.shortcut||"ctrl+alt+p").split("+").map(k=>`<span class="kbd">${esc(k)}</span>`).join("+")}</span>
+      </div>
+      <div class="sb-hint">${T.sbShiftHint}</div>
     </div>
+    <div id="sbPreview" class="hidden"></div>
   </div>`;
   $("#btnPin").onclick = async () => {
     const on = !S.settings.always_on_top;
@@ -542,6 +556,37 @@ function renderSidebar(){
   $("#btnHide").onclick = async () => { await call("hide_sidebar"); };
   $("#sbSearch").oninput = e => { sbFilter = e.target.value; renderSbList(); };
   renderSbList();
+}
+
+/* Hover preview: after a short delay over a row, show the prompt rendered
+   with its currently selected recipe. pvFor guards async races - by the time
+   render_prompt returns, the mouse may already be on a different row. */
+let sbPvT = 0, sbPvFor = null;
+function hideSbPreview(){
+  clearTimeout(sbPvT); sbPvFor = null;
+  $("#sbPreview")?.classList.add("hidden");
+}
+async function showSbPreview(p, rowEl){
+  const rid = p.recipes.length ? (p.selected_recipe || null) : null;
+  let out;
+  try { out = await call("render_prompt", { promptId: p.id, recipeId: rid }); }
+  catch(_) { return; }
+  if(sbPvFor !== p.id) return;
+  const box = $("#sbPreview"); if(!box) return;
+  const rname = rid ? (rById(rid)?.name || "?") : T.raw.replace(/^— /,"");
+  box.innerHTML = `<div class="pv-title">${esc(p.title)} · ${esc(rname)}</div>`;
+  box.appendChild(document.createTextNode(out.text));
+  box.classList.remove("hidden");
+  // below the row if it sits in the upper half of the window, else above
+  const r = rowEl.getBoundingClientRect();
+  box.style.top = ""; box.style.bottom = "";
+  if(r.top < window.innerHeight/2){
+    box.style.top = Math.round(r.bottom + 4) + "px";
+    box.style.maxHeight = Math.round(window.innerHeight - r.bottom - 12) + "px";
+  } else {
+    box.style.bottom = Math.round(window.innerHeight - r.top + 4) + "px";
+    box.style.maxHeight = Math.round(r.top - 12) + "px";
+  }
 }
 
 function renderSbList(){
@@ -577,8 +622,23 @@ function renderSbList(){
       const p = pById(sel.dataset.p);
       p.selected_recipe = sel.value || null;
       await call("set_selected_recipe", { promptId: p.id, recipeId: sel.value || null });
+      // refresh the hover preview so it shows the freshly picked recipe
+      const row = sel.closest(".sb-item");
+      if(row){ sbPvFor = p.id; showSbPreview(p, row.querySelector(".row")); }
     };
   });
+  // hover preview wiring
+  box.querySelectorAll(".sb-item").forEach(it=>{
+    const p = pById(it.dataset.id); if(!p) return;
+    it.addEventListener("mouseenter", ()=>{
+      clearTimeout(sbPvT);
+      sbPvFor = p.id;
+      sbPvT = setTimeout(()=>showSbPreview(p, it.querySelector(".row")), 350);
+    });
+    it.addEventListener("mouseleave", hideSbPreview);
+    it.addEventListener("dragstart", hideSbPreview);
+  });
+  box.addEventListener("scroll", hideSbPreview, { passive:true });
   box.querySelectorAll("[data-copy]").forEach(btn=>{
     btn.onclick = async (e) => {
       const p = pById(btn.dataset.copy);
