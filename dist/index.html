@@ -509,7 +509,6 @@ const SVG = {
 let S = { prompts:[], recipes:[], variables:[], settings:{} };
 const WIN = new URLSearchParams(location.search).get("w") || "main";
 let selPromptId = null, selRecipeId = null, view = "prompts";
-let pvRecipeId; // undefined = follow selected_recipe
 let sbFilter = "", listFilter = "", recFilter = "";
 // Shift+click chain copy: texts collected so far. A plain click restarts the
 // chain with just the clicked prompt, Shift+click appends to it.
@@ -909,7 +908,7 @@ function renderList(){
       </div>`;
     }).join("");
     box.querySelectorAll(".li").forEach(el=>{
-      el.addEventListener("click", ()=>{ selPromptId = el.dataset.id; pvRecipeId = undefined; renderList(); renderDetail(); });
+      el.addEventListener("click", ()=>{ selPromptId = el.dataset.id; renderList(); renderDetail(); });
     });
     box.querySelectorAll(".li-del").forEach(btn=>{
       btn.addEventListener("click", async e=>{
@@ -952,7 +951,6 @@ function renderDetail(){
 function renderPromptDetail(box){
   const p = pById(selPromptId);
   if(!p){ box.innerHTML = `<div class="empty-detail">${T.selectPrompt}</div>`; return; }
-  const pvId = pvRecipeId!==undefined ? pvRecipeId : (p.selected_recipe || (p.recipes[0]??null));
   box.innerHTML = `
   <div class="detail-pad">
     <div class="field"><label>${T.name}</label><input type="text" id="pTitle" value="${esc(p.title)}"></div>
@@ -974,11 +972,6 @@ function renderPromptDetail(box){
       </div>
       <div class="rtags" id="rtags"></div>
     </div>
-    <div class="field">
-      <div class="pv-head"><label style="margin:0">${T.preview}</label><select id="pvSel"></select></div>
-      <div class="preview" id="preview"></div>
-      <div class="pv-warn hidden" id="pvWarn"></div>
-    </div>
     <div class="actions">
       <button class="btn primary" id="btnSave">${T.save}</button>
       <button class="btn secondary" id="btnCopy">${SVG.copy} ${T.copy}</button>
@@ -992,7 +985,7 @@ function renderPromptDetail(box){
     $("#phChips").innerHTML = phs.map(x=>`<span class="ph-pill">{{${esc(x)}}}</span>`).join("");
   };
   updatePhChips();
-  $("#pContent").addEventListener("input", ()=>{ updatePhChips(); updatePreview(); });
+  $("#pContent").addEventListener("input", updatePhChips);
 
   // drag&drop variable chip into textarea, dropped at the exact mouse position
   const ta = $("#pContent");
@@ -1035,7 +1028,7 @@ function renderPromptDetail(box){
     ta.value = ta.value.slice(0,start) + ins + ta.value.slice(start);
     ta.selectionStart = ta.selectionEnd = start + ins.length;
     ta.focus();
-    updatePhChips(); updatePreview();
+    updatePhChips();
     toast(fmt(T.inserted, v));
   });
 
@@ -1052,8 +1045,7 @@ function renderPromptDetail(box){
         if(cb.checked && !p.recipes.includes(id)) p.recipes.push(id);
         if(!cb.checked) p.recipes = p.recipes.filter(x=>x!==id);
         if(p.selected_recipe && !p.recipes.includes(p.selected_recipe)) p.selected_recipe = p.recipes[0]||null;
-        if(pvRecipeId!==undefined && pvRecipeId && !p.recipes.includes(pvRecipeId)) pvRecipeId=undefined;
-        renderMsel($("#msSearch").value); renderTags(); renderPvSel(); updatePreview();
+        renderMsel($("#msSearch").value); renderTags();
       };
     });
   };
@@ -1066,7 +1058,7 @@ function renderPromptDetail(box){
       x.onclick = ()=>{
         p.recipes = p.recipes.filter(i=>i!==x.dataset.un);
         if(p.selected_recipe===x.dataset.un) p.selected_recipe=p.recipes[0]||null;
-        renderMsel($("#msSearch").value); renderTags(); renderPvSel(); updatePreview();
+        renderMsel($("#msSearch").value); renderTags();
       };
     });
   };
@@ -1074,33 +1066,7 @@ function renderPromptDetail(box){
   document.addEventListener("click", e=>{ if(!e.target.closest("#msel")) $("#mselPanel")?.classList.remove("open"); });
   $("#msSearch").oninput = e=>renderMsel(e.target.value);
 
-  // preview
-  const renderPvSel = ()=>{
-    const cur = pvRecipeId!==undefined ? pvRecipeId : (p.selected_recipe || (p.recipes[0]??null));
-    $("#pvSel").innerHTML = p.recipes.map(id=>{
-      const r=rById(id); if(!r) return "";
-      return `<option value="${esc(id)}" ${cur===id?"selected":""}>${esc(r.name)}</option>`;
-    }).join("") + `<option value="" ${!cur?"selected":""}>${T.raw}</option>`;
-    $("#pvSel").onchange = ()=>{ pvRecipeId = $("#pvSel").value || null; updatePreview(); };
-  };
-  const updatePreview = ()=>{
-    const rid = $("#pvSel").value || null;
-    const content = $("#pContent").value;
-    const vals = rid ? (rById(rid)?.values || {}) : null;
-    let missing = [];
-    const html = esc(content).replace(/\{\{([a-z0-9_]+)\}\}/g,(all,k)=>{
-      // an empty value counts as missing, matching copy_prompt exactly
-      if(vals && vals[k]) return `<span class="fill">${esc(vals[k])}</span>`;
-      if(rid){ if(!missing.includes(k)) missing.push(k); }
-      return `<span class="ph">{{${esc(k)}}}</span>`;
-    });
-    $("#preview").innerHTML = html || "<i style='color:var(--faint)'>prázdný obsah</i>";
-    const w=$("#pvWarn");
-    if(rid && missing.length){ w.classList.remove("hidden"); w.textContent = fmt(T.missingWarn, missing.length); }
-    else w.classList.add("hidden");
-  };
-
-  renderMsel(); renderTags(); renderPvSel(); updatePreview();
+  renderMsel(); renderTags();
 
   // actions
   $("#btnSave").onclick = async ()=>{
@@ -1110,7 +1076,8 @@ function renderPromptDetail(box){
     await refresh(true); selPromptId = saved.id; render(); toast(T.saved);
   };
   $("#btnCopy").onclick = async ()=>{
-    const rid = $("#pvSel").value || null;
+    // same recipe the sidebar would use: the prompt's selected one (or raw)
+    const rid = p.recipes.length ? (p.selected_recipe || null) : null;
     await call("save_prompt", { promptJson: JSON.stringify({
       id:p.id, title:$("#pTitle").value, content:$("#pContent").value,
       recipes:p.recipes, selected_recipe:p.selected_recipe }) });
