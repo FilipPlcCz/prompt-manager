@@ -1,0 +1,13 @@
+[package]
+name = "pm-mcp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Prompt Manager MCP server (stdio, JSON-RPC 2.0). Zero dependencies."
+
+[[bin]]
+name = "prompt-manager-mcp"
+path = "src/main.rs"
+
+[dependencies]
+pm-core = { path = "../pm-core" }

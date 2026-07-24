@@ -1,0 +1,1188 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prompt Manager</title>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171a21; --panel2:#1d212b; --panel3:#242a36;
+    --border:#2c3340; --border2:#3a4356;
+    --text:#e8ebf1; --muted:#9aa3b2; --faint:#6b7484;
+    --accent:#6c8cff; --accent2:#8b6cff; --accent-soft:rgba(108,140,255,.14);
+    --green:#4ade80; --red:#f87171; --amber:#fbbf24;
+    --chip:#2a3040;
+    color-scheme:dark;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body,#app{height:100%}
+  body{
+    background:var(--bg);color:var(--text);
+    font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
+    font-size:14px;overflow:hidden;user-select:none;
+  }
+  input,textarea,select,button{font-family:inherit;color:inherit}
+  textarea,input{user-select:text}
+  ::-webkit-scrollbar{width:9px;height:9px}
+  ::-webkit-scrollbar-thumb{background:#333c4d;border-radius:6px}
+  ::-webkit-scrollbar-track{background:transparent}
+  .hidden{display:none!important}
+
+  .icon-btn{border:0;background:transparent;color:var(--muted);width:26px;height:26px;border-radius:6px;
+    display:grid;place-items:center;cursor:pointer;flex:none}
+  .icon-btn:hover{background:var(--panel3);color:var(--text)}
+  .icon-btn svg{width:14px;height:14px}
+  .logo{width:20px;height:20px;border-radius:5px;background:linear-gradient(135deg,var(--accent),var(--accent2));
+    display:grid;place-items:center;font-size:9px;font-weight:700;color:#fff;flex:none}
+  .grip{color:#3d4658;cursor:grab;flex:none;font-size:11px;letter-spacing:-1px;padding:2px 3px;border-radius:4px;user-select:none}
+  .grip:hover{color:var(--muted);background:var(--panel3)}
+  .dragging{opacity:.35}
+  .drop-before{box-shadow:0 -2px 0 var(--accent)}
+  .drop-after{box-shadow:0 2px 0 var(--accent)}
+
+  /* ============ SIDEBAR window ============ */
+  body.w-sidebar{background:#141821}
+  #sidebar{display:flex;flex-direction:column;height:100%}
+  .sb-titlebar{display:flex;align-items:center;gap:6px;padding:6px 7px;border-bottom:1px solid var(--border)}
+  .sb-titlebar .name{font-weight:600;font-size:.8rem;flex:1;white-space:nowrap;overflow:hidden}
+  .sb-search{padding:6px 7px;border-bottom:1px solid var(--border)}
+  .sb-search input,.pane-search input{
+    width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:7px;
+    padding:5px 8px;font-size:.78rem;outline:none;
+  }
+  .sb-search input:focus,.pane-search input:focus{border-color:var(--accent)}
+  #sbList{flex:1;overflow-y:auto;padding:4px 5px}
+  .sb-item{border-radius:6px;margin-bottom:1px}
+  .sb-item .row{display:flex;align-items:center;gap:4px;padding:3px 3px 3px 2px;border-radius:6px;min-height:25px}
+  .sb-item .row:hover{background:var(--panel2)}
+  /* the title is what gives way when space runs short - the recipe badge
+     must stay readable in full (that is the whole point of the redesign) */
+  .sb-item .title{flex:1 1 auto;min-width:0;font-size:.76rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .copy-btn{border:1px solid var(--border);background:var(--panel2);color:var(--muted);
+    width:23px;height:23px;border-radius:6px;display:grid;place-items:center;cursor:pointer;flex:none}
+  .copy-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
+  .copy-btn svg{width:12px;height:12px}
+  /* recipe badge: a native <select> skinned as a pill, so the OS draws the
+     popup and it is never clipped by the narrow always-on-top window */
+  /* max-width lowered with the 25 % narrower sidebar, otherwise the recipe
+     badge eats the row and the prompt name is left with a few pixels */
+  .rsel{flex:0 1 auto;max-width:46%;appearance:none;-webkit-appearance:none;
+    background:var(--accent-soft) url("data:image/svg+xml;charset=utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237aa2f7' stroke-width='3'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 5px center/9px 9px;
+    border:1px solid rgba(108,140,255,.42);border-radius:11px;color:var(--accent);
+    font-size:.68rem;font-weight:600;padding:1px 17px 1px 8px;height:19px;outline:none;cursor:pointer;
+    white-space:nowrap;text-overflow:ellipsis}
+  .rsel:hover,.rsel:focus{background-color:var(--accent);color:#0b0d12}
+  .rsel option{background:var(--panel2);color:var(--text);font-weight:400}
+  .icon-btn.pin.on{color:var(--accent);background:var(--accent-soft)}
+  .sb-foot{border-top:1px solid var(--border);padding:5px 8px;font-size:.66rem;color:var(--faint);
+    display:flex;justify-content:space-between;align-items:center}
+  .kbd{background:var(--panel3);border:1px solid var(--border2);border-bottom-width:2px;border-radius:4px;
+    padding:0 4px;font-size:.62rem;color:var(--muted);font-family:Consolas,monospace}
+
+  /* ============ MAIN window ============ */
+  #main{display:flex;flex-direction:column;height:100%}
+  .topbar{display:flex;align-items:center;gap:10px;padding:8px 12px;background:#12151d;border-bottom:1px solid var(--border)}
+  .topbar .name{font-weight:600;font-size:.85rem}
+  .nav{display:flex;gap:2px;margin-left:10px;flex:1}
+  .nav button{border:0;background:transparent;color:var(--muted);padding:6px 13px;border-radius:7px;
+    font-size:.8rem;font-weight:600;cursor:pointer}
+  .nav button.on{background:var(--accent-soft);color:var(--accent)}
+  .nav button:hover:not(.on){color:var(--text)}
+
+  .varbar{display:flex;align-items:center;gap:7px;padding:8px 14px;background:#151923;
+    border-bottom:1px solid var(--border);flex-wrap:wrap;min-height:40px}
+  .varbar .vb-label{font-size:.68rem;color:var(--faint);text-transform:uppercase;letter-spacing:.7px}
+  .varbar .vb-auto{font-size:.66rem;color:var(--faint);margin-left:auto;font-style:italic}
+  .chip{display:inline-flex;align-items:center;gap:6px;background:var(--chip);border:1px solid var(--border2);
+    border-radius:15px;padding:3px 10px 3px 8px;font-size:.74rem;cursor:grab;user-select:none}
+  .chip:hover{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .chip .chip-x{color:var(--faint);font-size:.7rem;cursor:pointer;margin-left:-2px;
+    width:14px;height:14px;display:grid;place-items:center;border-radius:50%}
+  .chip .chip-x:hover{background:var(--red);color:#fff}
+  .chip.chip-add{cursor:pointer;padding:3px 8px;color:var(--accent);border-style:dashed}
+  .chip.chip-add svg{width:12px;height:12px;display:block}
+  .chip.editing{cursor:text}
+  .chip .chip-in{background:transparent;border:0;outline:none;color:var(--text);
+    font-size:.74rem;font-family:inherit;min-width:60px}
+  /* red delete on recipe rows, revealed on hover */
+  .li-del{border:0;background:transparent;color:var(--red);opacity:0;cursor:pointer;
+    width:22px;height:22px;border-radius:5px;flex:none;font-size:.8rem;line-height:1}
+  .li:hover .li-del{opacity:.75}
+  .li-del:hover{opacity:1;background:rgba(248,113,113,.15)}
+  .chip .dot{width:6px;height:6px;border-radius:50%;background:var(--accent);flex:none}
+  .chip .cnt{color:var(--faint);font-size:.62rem;font-family:Consolas,monospace}
+
+  .body2{flex:1;display:flex;min-height:0}
+  .pane-left{width:270px;flex:none;border-right:1px solid var(--border);display:flex;flex-direction:column;background:#141822}
+  .pane-search{padding:10px 10px 6px}
+  .btn-new{margin:0 10px 8px;border:1px dashed var(--border2);background:transparent;color:var(--muted);
+    border-radius:8px;padding:7px;font-size:.78rem;cursor:pointer}
+  .btn-new:hover{color:var(--accent);border-color:var(--accent)}
+  .pane-list{flex:1;overflow-y:auto;padding:2px 8px 10px}
+  .li{display:flex;align-items:center;gap:5px;padding:6px 7px 6px 3px;border-radius:7px;cursor:pointer;margin-bottom:1px}
+  .li .tt{flex:1;min-width:0}
+  .li .t{font-size:.8rem;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .li .m{font-size:.65rem;color:var(--faint);margin-top:1px}
+  .li:hover{background:var(--panel2)}
+  .li.sel{background:var(--accent-soft);outline:1px solid #4360c93d}
+  .li.sel .t{color:var(--accent)}
+
+  .detail{flex:1;overflow-y:auto}
+  .detail-pad{padding:16px 20px 24px;display:flex;flex-direction:column;gap:14px;max-width:980px}
+  .field label{display:block;font-size:.7rem;color:var(--faint);text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px}
+  .field input[type=text]{width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:8px;
+    padding:9px 12px;font-size:.95rem;font-weight:600;outline:none}
+  .field input[type=text]:focus{border-color:var(--accent)}
+  textarea.editor{width:100%;background:#12151d;border:1px solid var(--border);border-radius:10px;padding:13px 15px;
+    min-height:170px;font-family:Consolas,"Cascadia Code",monospace;font-size:.85rem;line-height:1.6;color:#d7dce6;
+    outline:none;resize:vertical}
+  textarea.editor:focus{border-color:var(--accent)}
+  textarea.editor.dragover{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .ed-hint{font-size:.7rem;color:var(--faint);margin-top:5px}
+  .ph-chips{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px}
+  .ph-pill{font-size:.68rem;background:var(--accent-soft);color:var(--accent);border:1px solid #44599e55;
+    border-radius:5px;padding:1px 7px;font-family:Consolas,monospace}
+
+  .msel{position:relative;display:inline-block}
+  .msel-btn{display:inline-flex;align-items:center;gap:9px;background:var(--panel2);border:1px solid var(--border2);
+    border-radius:8px;padding:8px 14px;font-size:.8rem;cursor:pointer;font-weight:600}
+  .msel-btn:hover{border-color:var(--accent)}
+  .msel-btn .car{color:var(--faint);font-size:.68rem}
+  .msel-panel{display:none;position:absolute;top:calc(100% + 6px);left:0;z-index:40;width:300px;
+    background:var(--panel2);border:1px solid var(--border2);border-radius:10px;box-shadow:0 14px 34px rgba(0,0,0,.55);overflow:hidden}
+  .msel-panel.open{display:block}
+  .msel-panel .ms-search{padding:8px;border-bottom:1px solid var(--border)}
+  .msel-panel .ms-search input{width:100%;background:var(--panel3);border:1px solid var(--border);border-radius:7px;
+    padding:6px 9px;font-size:.76rem;outline:none}
+  .msel-list{max-height:220px;overflow-y:auto;padding:5px}
+  .msel-list label{display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:7px;font-size:.78rem;cursor:pointer}
+  .msel-list label:hover{background:var(--panel3)}
+  .msel-list input{accent-color:var(--accent);width:14px;height:14px}
+  .msel-list .vcnt{margin-left:auto;color:var(--faint);font-size:.64rem}
+  .msel-foot{border-top:1px solid var(--border);padding:7px 10px;font-size:.66rem;color:var(--faint)}
+  .rtags{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+  .rtag{display:inline-flex;align-items:center;gap:6px;background:var(--accent-soft);color:var(--accent);
+    border:1px solid #44599e55;border-radius:14px;padding:3px 10px;font-size:.72rem;font-weight:600}
+  .rtag i{cursor:pointer;font-style:normal;color:#8ba0e0}
+  .rtag i:hover{color:var(--red)}
+
+  .pv-head{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+  .pv-head select{background:var(--panel2);border:1px solid var(--border2);border-radius:7px;
+    font-size:.76rem;padding:4px 8px;outline:none;cursor:pointer}
+  .preview{background:#101319;border:1px solid var(--border);border-radius:10px;padding:12px 15px;
+    font-family:Consolas,monospace;font-size:.78rem;line-height:1.6;color:#b9c2d0;white-space:pre-wrap;user-select:text;min-height:40px}
+  .preview .fill{color:var(--green)}
+  .preview .ph{background:var(--accent-soft);color:var(--accent);border-radius:4px;padding:0 3px}
+  .pv-warn{font-size:.7rem;color:var(--amber);margin-top:6px}
+
+  .actions{display:flex;gap:10px;align-items:center;padding-top:2px}
+  .btn{border:0;border-radius:9px;padding:9px 17px;font-size:.82rem;font-weight:600;cursor:pointer;
+    display:inline-flex;align-items:center;gap:8px}
+  .btn.primary{background:linear-gradient(135deg,var(--accent),var(--accent2));color:#fff}
+  .btn.primary:hover{filter:brightness(1.12)}
+  .btn.secondary{background:var(--panel3);border:1px solid var(--border2)}
+  .btn.secondary:hover{border-color:var(--accent);color:var(--accent)}
+  .btn.danger{background:transparent;color:var(--red);border:1px solid transparent;margin-left:auto}
+  .btn.danger:hover{border-color:#f8717150;background:#f871710d}
+
+  .vtable{background:#12151d;border:1px solid var(--border);border-radius:10px;overflow:hidden}
+  .vtable.dragover{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+  .vt-head,.vt-row{display:grid;grid-template-columns:220px 1fr;align-items:center}
+  .vt-head{background:#151923;border-bottom:1px solid var(--border);padding:7px 12px;font-size:.66rem;
+    color:var(--faint);text-transform:uppercase;letter-spacing:.6px}
+  .vt-row{border-bottom:1px solid #1d2230;padding:3px 12px}
+  .vt-row:last-child{border-bottom:0}
+  .vt-row input{background:transparent;border:1px solid transparent;border-radius:6px;
+    padding:5px 8px;font-size:.78rem;font-family:Consolas,monospace;outline:none;width:96%}
+  .vt-row input:hover{border-color:var(--border)}
+  .vt-row input:focus{border-color:var(--accent);background:var(--panel2)}
+  /* the name is read-only now: variables are managed in the top bar */
+  .vt-row .nm{color:var(--accent);font-size:.78rem;padding:5px 0;font-family:Consolas,monospace}
+  .vt-del{border:0;background:transparent;color:var(--faint);cursor:pointer;width:26px;height:26px;
+    border-radius:6px;justify-self:end}
+  .vt-del:hover{color:var(--red);background:#f871710d}
+  .vt-empty{padding:15px;text-align:center;color:var(--faint);font-size:.75rem}
+  .vt-add{border:1px dashed var(--border2);background:transparent;color:var(--muted);border-radius:8px;
+    padding:7px 13px;font-size:.75rem;cursor:pointer;margin-top:8px}
+  .vt-add:hover{color:var(--accent);border-color:var(--accent)}
+
+  /* settings modal */
+  .modal-bg{position:fixed;inset:0;background:#0009;z-index:80;display:grid;place-items:center}
+  .modal{background:var(--panel);border:1px solid var(--border2);border-radius:12px;width:min(620px,92vw);
+    max-height:88vh;overflow-y:auto;padding:18px 20px;box-shadow:0 20px 60px rgba(0,0,0,.6)}
+  .modal h2{font-size:1rem;margin-bottom:14px}
+  .modal .field{margin-bottom:12px}
+  .modal input[type=text],.modal input[type=number]{width:100%;background:var(--panel2);border:1px solid var(--border);
+    border-radius:8px;padding:8px 11px;font-size:.82rem;outline:none}
+  .modal .roww{display:flex;gap:8px;align-items:center}
+  .modal .roww input{flex:1}
+  .modal pre{background:#101319;border:1px solid var(--border);border-radius:8px;padding:10px;
+    font-size:.7rem;overflow-x:auto;user-select:text;margin-top:6px}
+  .modal .close-row{display:flex;justify-content:flex-end;gap:10px;margin-top:14px}
+  .switch{display:flex;align-items:center;gap:8px;font-size:.8rem;cursor:pointer}
+  .switch input{accent-color:var(--accent);width:15px;height:15px}
+
+  .empty-detail{display:grid;place-items:center;height:100%;color:var(--faint);font-size:.85rem}
+
+  #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);opacity:0;
+    background:#1c2431;border:1px solid #2e5c40;color:var(--green);padding:9px 16px;border-radius:10px;
+    font-size:.8rem;font-weight:600;pointer-events:none;transition:.25s;z-index:99;display:flex;gap:8px;align-items:center;
+    box-shadow:0 10px 30px rgba(0,0,0,.5)}
+  #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+  #toast.err{border-color:#5c2e2e;color:var(--red)}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<div id="toast"><span id="toastMsg"></span></div>
+
+<script>
+"use strict";
+/* =====================================================================
+   Prompt Manager – frontend (no build step, no dependencies)
+   Runs inside Tauri (window.__TAURI__) or in a plain browser with a mock
+   backend (for development/preview).
+   ===================================================================== */
+
+/* ---------- backend bridge ---------- */
+const IS_TAURI = !!(window.__TAURI__ && window.__TAURI__.core);
+const invoke = IS_TAURI
+  ? window.__TAURI__.core.invoke
+  : (cmd, args) => mockInvoke(cmd, args || {});
+const onEvent = IS_TAURI
+  ? (name, cb) => window.__TAURI__.event.listen(name, cb)
+  : () => Promise.resolve(() => {});
+
+/* ---------- tiny mock backend for browser preview ---------- */
+const mock = {
+  prompts: [], recipes: [], variables: [], nextId: 1,
+  settings: { library_dir: "(náhled v prohlížeči)", api_enabled: true, api_port: 8737,
+              api_key: "demo-api-key", shortcut: "ctrl+alt+p", sidebar_ratio: 0.15,
+              always_on_top: true },
+};
+/* every recipe holds every variable (empty value = not filled in) */
+function mockNormalize(){
+  mock.recipes.forEach(r=>{
+    const out={};
+    mock.variables.forEach(n=> out[n] = r.values[n] ?? "");
+    Object.keys(r.values).forEach(k=>{ if(!(k in out)) out[k]=r.values[k]; });
+    r.values = out;
+  });
+}
+function mockSeed(){
+  mock.variables = ["projekt_cesta","projekt_nazev","jazyk","vystupni_slozka","zakaznik","kontakt_email"];
+  const r1 = { id:"r1", name:"Ukázkový projekt", updated:"", values:{projekt_cesta:"C:\\Projekty\\Ukazka", projekt_nazev:"Ukazka", jazyk:"rust", vystupni_slozka:"C:\\Vystupy"} };
+  const r2 = { id:"r2", name:"Testovací linka", updated:"", values:{projekt_cesta:"C:\\Projekty\\TestLinka", projekt_nazev:"TestLinka", jazyk:"st", vystupni_slozka:"C:\\Vystupy\\test"} };
+  const r3 = { id:"r3", name:"Obecný projekt", updated:"", values:{projekt_cesta:"C:\\tmp\\projekt", jazyk:"python"} };
+  const r4 = { id:"r4", name:"ACME s.r.o.", updated:"", values:{zakaznik:"ACME s.r.o.", kontakt_email:"info@acme.cz"} };
+  mock.recipes = [r1,r2,r3,r4];
+  mockNormalize();
+  mock.prompts = [
+    { id:"p1", title:"Code review – Rust", content:"Proveď důkladné code review projektu ve složce {{projekt_cesta}}.\nJazyk projektu: {{jazyk}}. Projekt se jmenuje {{projekt_nazev}}.\n\nZaměř se na bezpečnost, čitelnost a výkon. Výstup ulož jako markdown do {{vystupni_slozka}}\\review.md a shrň 5 hlavních nálezů.", recipes:["r1","r2","r3"], selected_recipe:"r1", tags:[], created:"", updated:"" },
+    { id:"p2", title:"Analýza PLC logu", content:"Analyzuj přiložený log z linky {{projekt_nazev}} a najdi anomálie.", recipes:["r1","r2"], selected_recipe:"r2", tags:[], created:"", updated:"" },
+    { id:"p3", title:"Sumarizace meetingu", content:"Shrň následující zápis do 5 odrážek:\n\n", recipes:[], selected_recipe:null, tags:[], created:"", updated:"" },
+    { id:"p4", title:"E-mail zákazníkovi", content:"Napiš profesionální e-mail pro {{zakaznik}} ({{kontakt_email}}).", recipes:["r4"], selected_recipe:"r4", tags:[], created:"", updated:"" },
+    { id:"p5", title:"Git commit message", content:"Navrhni conventional commit message pro tento diff:\n\n", recipes:[], selected_recipe:null, tags:[], created:"", updated:"" },
+  ];
+}
+mockSeed();
+function mockPlaceholders(c){ const out=[]; const re=/\{\{([a-z0-9_]+)\}\}/g; let m;
+  while((m=re.exec(c))) if(!out.includes(m[1])) out.push(m[1]); return out; }
+function mockRender(content, values){
+  const missing=[];
+  const text = content.replace(/\{\{([a-z0-9_]+)\}\}/g,(all,k)=>{
+    if(values && values[k]) return values[k];   // empty value counts as missing
+    if(!missing.includes(k)) missing.push(k);
+    return all;
+  });
+  return { text, missing };
+}
+function mockPromptJson(p){ return {...p, placeholders: mockPlaceholders(p.content)}; }
+async function mockInvoke(cmd, a){
+  const P = mock.prompts, R = mock.recipes;
+  const findP = id => { const p=P.find(x=>x.id===id); if(!p) throw "Nenalezeno: "+id; return p; };
+  const findR = id => { const r=R.find(x=>x.id===id); if(!r) throw "Nenalezeno: "+id; return r; };
+  switch(cmd){
+    case "state_snapshot": {
+      // global order from mock.variables; every variable lists EVERY recipe
+      return JSON.stringify({
+        prompts:P.map(mockPromptJson), recipes:R,
+        variables:mock.variables.map(n=>({name:n,
+          recipes:R.map(r=>({recipe_id:r.id,recipe_name:r.name,value:r.values[n]??""}))})),
+        settings:mock.settings});
+    }
+    case "add_variable": {
+      if(!/^[a-z0-9_]+$/.test(a.name)) throw "Neplatný název proměnné: "+a.name;
+      if(mock.variables.includes(a.name)) throw "Proměnná „"+a.name+"“ už existuje";
+      mock.variables.push(a.name); mockNormalize(); return JSON.stringify(mock.variables); }
+    case "rename_variable": {
+      if(a.oldName===a.newName) return JSON.stringify(mock.variables);
+      if(!/^[a-z0-9_]+$/.test(a.newName)) throw "Neplatný název proměnné: "+a.newName;
+      if(!mock.variables.includes(a.oldName)) throw "Nenalezeno: "+a.oldName;
+      if(mock.variables.includes(a.newName)) throw "Proměnná „"+a.newName+"“ už existuje";
+      mock.variables = mock.variables.map(n=>n===a.oldName?a.newName:n);
+      R.forEach(r=>{ if(a.oldName in r.values){ r.values[a.newName]=r.values[a.oldName]; delete r.values[a.oldName]; } });
+      // rewrite prompt bodies, leaving the escaped \{{x}} form alone
+      const re=new RegExp("(\\\\)?\\{\\{"+a.oldName+"\\}\\}","g");
+      P.forEach(p=>{ p.content = p.content.replace(re,(all,esc)=> esc? all : "{{"+a.newName+"}}"); });
+      mockNormalize(); return JSON.stringify(mock.variables); }
+    case "delete_variable": {
+      if(!mock.variables.includes(a.name)) throw "Nenalezeno: "+a.name;
+      mock.variables = mock.variables.filter(n=>n!==a.name);
+      R.forEach(r=>{ delete r.values[a.name]; });   // prompt bodies are left alone
+      return JSON.stringify(mock.variables); }
+    case "variable_usage":
+      return JSON.stringify(P.filter(p=>mockPlaceholders(p.content).includes(a.name)).map(p=>p.title));
+    case "set_always_on_top": { mock.settings.always_on_top = !!a.on; return null; }
+    case "create_prompt": { const p={id:"p"+(++mock.nextId+10), title:a.title, content:a.content||"", recipes:[], selected_recipe:null, tags:[], created:"", updated:""}; P.push(p); return JSON.stringify(mockPromptJson(p)); }
+    case "save_prompt": { const v=JSON.parse(a.promptJson); const p=findP(v.id); Object.assign(p,{title:v.title??p.title,content:v.content??p.content,recipes:v.recipes??p.recipes,selected_recipe:v.selected_recipe!==undefined?v.selected_recipe:p.selected_recipe});
+      p.recipes=p.recipes.filter(id=>R.some(r=>r.id===id));
+      if(p.selected_recipe && !p.recipes.includes(p.selected_recipe)) p.selected_recipe=p.recipes[0]||null;
+      return JSON.stringify(mockPromptJson(p)); }
+    case "delete_prompt": { const i=P.findIndex(x=>x.id===a.id); if(i>=0)P.splice(i,1); return null; }
+    case "duplicate_prompt": { const s=findP(a.id); const p={...s, id:"p"+(++mock.nextId+10), title:s.title+" (kopie)", recipes:[...s.recipes]}; P.push(p); return JSON.stringify(mockPromptJson(p)); }
+    case "reorder_prompts": { const ids=JSON.parse(a.idsJson); mock.prompts=ids.map(id=>P.find(p=>p.id===id)).filter(Boolean).concat(P.filter(p=>!ids.includes(p.id))); return null; }
+    case "set_selected_recipe": { findP(a.promptId).selected_recipe=a.recipeId||null; return null; }
+    case "create_recipe": { const vals={}; mock.variables.forEach(n=>vals[n]="");
+      const r={id:"r"+(++mock.nextId+10), name:a.name, updated:"", values:vals}; R.push(r); return JSON.stringify(r); }
+    case "save_recipe": { const v=JSON.parse(a.recipeJson); const r=findR(v.id);
+      if(v.values) for(const k of Object.keys(v.values)) if(!/^[a-z0-9_]+$/.test(k)) throw "Neplatný název proměnné: "+k;
+      Object.assign(r,{name:v.name??r.name, values:v.values??r.values});
+      // a value set introduced through a recipe extends the global list
+      if(v.values) Object.keys(v.values).forEach(k=>{ if(!mock.variables.includes(k)) mock.variables.push(k); });
+      mockNormalize(); return JSON.stringify(r); }
+    case "delete_recipe": { const affected=[]; P.forEach(p=>{ if(p.recipes.includes(a.id)){affected.push(p.title); p.recipes=p.recipes.filter(x=>x!==a.id); if(p.selected_recipe===a.id)p.selected_recipe=p.recipes[0]||null;} });
+      const i=R.findIndex(x=>x.id===a.id); if(i>=0)R.splice(i,1); return JSON.stringify(affected); }
+    case "recipe_usage": return JSON.stringify(P.filter(p=>p.recipes.includes(a.id)).map(p=>p.title));
+    case "copy_text": { if(navigator.clipboard) navigator.clipboard.writeText(a.text).catch(()=>{}); return null; }
+    case "render_prompt": case "copy_prompt": {
+      const p=findP(a.promptId); const vals=a.recipeId?findR(a.recipeId).values:null;
+      const out=a.recipeId?mockRender(p.content,vals):{text:p.content,missing:[]};
+      if(cmd==="copy_prompt"&&navigator.clipboard) navigator.clipboard.writeText(out.text).catch(()=>{});
+      return JSON.stringify(out); }
+    case "get_settings": return JSON.stringify(mock.settings);
+    case "save_settings": { const v=JSON.parse(a.settingsJson); Object.assign(mock.settings,v); return JSON.stringify(mock.settings); }
+    case "mcp_config_snippet": return JSON.stringify({mcpServers:{"prompt-manager":{command:"prompt-manager-mcp.exe",args:["--library",mock.settings.library_dir]}}},null,2);
+    case "open_library_folder": case "toggle_sidebar": case "open_main": case "hide_sidebar": case "hide_main": return null;
+    default: throw "unknown command "+cmd;
+  }
+}
+
+/* ---------- i18n (cs) ---------- */
+const T = {
+  search:"Hledat…", searchRecipe:"Hledat recept…", prompts:"Prompty", recipes:"Recepty",
+  settings:"Nastavení", newPrompt:"+ Nový prompt", newRecipe:"+ Nový recept",
+  name:"Název promptu", content:"Obsah promptu", assigned:"Přiřazené recepty",
+  preview:"Živý náhled — recept:", save:"Uložit", copy:"Kopírovat", del:"Smazat",
+  duplicate:"Duplikovat", raw:"— bez vyplnění (raw)", copied:"Zkopírováno do schránky",
+  copiedWith:"Zkopírováno — recept „{0}“", copiedRaw:"Zkopírováno — raw text",
+  copiedChain:"Ve schránce {0} promptů za sebou (Shift+klik přidává další)",
+  saved:"Uloženo ✓", recipeSaved:"Recept uložen ✓", orderSaved:"Pořadí uloženo",
+  variables:"Proměnné", varAuto:"klik vloží · ✕ smazat · dvojklik přejmenovat · + přidat",
+  varDrop:"přetažením vložíte proměnnou do receptu",
+  pinTitle:"Vždy navrchu (nad ostatními okny)", pinOn:"Okno je nad ostatními 📌",
+  pinOff:"Okno se chová normálně", addVarTitle:"Přidat proměnnou",
+  varAddedG:"Proměnná {0} přidána", varRenamed:"Přejmenováno na {0}", varDeleted:"Proměnná {0} smazána",
+  confirmDelVar:"Smazat proměnnou „{0}“? Zmizí ze všech receptur. Prompty ({1}) si {{{0}}} ponechají — bude se hlásit jako nevyplněné.",
+  confirmDelVar0:"Smazat proměnnou „{0}“? Zmizí ze všech receptur.",
+  dirtyWarn:"Prompt má neuložené změny. Nejdřív ho uložte — přejmenování přepíše texty promptů.",
+  filledIn:"{0}/{1}",
+  recipeName:"Název receptu", recipeVars:"Proměnné receptu", varName:"Proměnná", varValue:"Hodnota",
+  addVar:"+ Přidat proměnnou", saveRecipe:"Uložit recept", promptsCount:"{0} promptů",
+  emptyVars:"Zatím nejsou žádné proměnné — přidejte je tlačítkem + v horní liště.",
+  confirmDelPrompt:"Opravdu smazat prompt „{0}“?",
+  confirmDelRecipe:"Recept „{0}“ používají prompty: {1}. Opravdu smazat? Reference budou odebrány.",
+  confirmDelRecipe0:"Opravdu smazat recept „{0}“?",
+  missingWarn:"⚠ {0} placeholder(ů) nemá v tomto receptu hodnotu — zůstanou nevyplněné.",
+  edHint:"Klikněte na chip proměnné v horní liště (vloží se na pozici kurzoru), nebo ho sem přetáhněte.",
+  noEditor:"Nejdřív otevřete prompt vlevo.",
+  selectPrompt:"Vyberte prompt vlevo, nebo vytvořte nový.",
+  selectRecipe:"Vyberte recept vlevo, nebo vytvořte nový.",
+  usedIn:"vyplněno {0} · použit v {1} promptech", recCount:"{0} receptů",
+  newPromptName:"Nový prompt", newRecipeName:"Nový recept",
+  inserted:"Vložen placeholder {{{0}}}", varAdded:"Proměnná {0} přidána do receptu",
+  msFoot:"Zaškrtnuté recepty budou na výběr v sidebaru.",
+  copyApiKey:"Zkopírovat", regen:"Vygenerovat nový", apiUrl:"Adresa API", apiKey:"API klíč",
+  library:"Složka knihovny", openFolder:"Otevřít složku", mcpTitle:"MCP konfigurace (Claude Code / Claude Desktop)",
+  mcpCopy:"Zkopírovat konfiguraci", close:"Zavřít", apiEnabled:"Povolit lokální REST API (změna vyžaduje restart aplikace)",
+  shortcut:"Globální zkratka (restart)", err:"Chyba: {0}",
+};
+const fmt = (s, ...a) => s.replace(/\{(\d)\}/g, (_,i)=>a[+i]);
+
+/* ---------- helpers ---------- */
+const $ = sel => document.querySelector(sel);
+const esc = s => String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+
+/* Maps a mouse point to a character offset inside a <textarea>. No single API
+   is reliable across engines, so try the standards, then WebKit, then fall
+   back to a measuring mirror div. Returns null only if everything fails. */
+function offsetFromPoint(ta, x, y){
+  const clamp = o => (o==null || o<0) ? null : Math.min(o, ta.value.length);
+  // 1) standard
+  if(document.caretPositionFromPoint){
+    try{
+      const c = document.caretPositionFromPoint(x, y);
+      if(c && (c.offsetNode===ta || ta.contains(c.offsetNode) || c.offsetNode?.nodeType===3))
+        return clamp(c.offset);
+    }catch(_){}
+  }
+  // 2) legacy WebKit/Blink (present in WebView2)
+  if(document.caretRangeFromPoint){
+    try{
+      const r = document.caretRangeFromPoint(x, y);
+      if(r) return clamp(r.startOffset);
+    }catch(_){}
+  }
+  // 3) mirror-div fallback: recreate the textarea's text layout off-screen and
+  //    binary-search for the character whose rect contains the point
+  try{
+    const cs = getComputedStyle(ta);
+    const rect = ta.getBoundingClientRect();
+    const div = document.createElement("div");
+    const props = ["fontFamily","fontSize","fontWeight","fontStyle","letterSpacing",
+      "textTransform","wordSpacing","lineHeight","paddingTop","paddingRight",
+      "paddingBottom","paddingLeft","borderTopWidth","borderRightWidth",
+      "borderBottomWidth","borderLeftWidth","boxSizing","tabSize"];
+    props.forEach(p=> div.style[p] = cs[p]);
+    div.style.position="absolute"; div.style.visibility="hidden";
+    div.style.whiteSpace="pre-wrap"; div.style.overflowWrap="break-word";
+    div.style.width = ta.clientWidth+"px"; div.style.left="-9999px"; div.style.top="0";
+    const txt = ta.value;
+    const node = document.createTextNode(txt);
+    div.appendChild(node);
+    document.body.appendChild(div);
+    const px = x - rect.left + ta.scrollLeft - div.clientLeft;
+    const py = y - rect.top + ta.scrollTop - div.clientTop;
+    const range = document.createRange();
+    let best = txt.length;
+    // linear-ish scan is fine for editor-sized text; break at first hit row
+    for(let i=0;i<=txt.length;i++){
+      range.setStart(node, i);
+      range.setEnd(node, Math.min(i+1, txt.length));
+      const rects = range.getClientRects();
+      if(!rects.length) continue;
+      const rr = rects[0];
+      const rx = rr.left - div.getBoundingClientRect().left;
+      const ry = rr.top - div.getBoundingClientRect().top;
+      if(py < ry + rr.height && px < rx + rr.width/2){ best = i; break; }
+      if(py < ry + rr.height && i===txt.length){ best = i; }
+    }
+    document.body.removeChild(div);
+    return clamp(best);
+  }catch(_){}
+  return null;
+}
+let toastT;
+function toast(msg, isErr){
+  const t=$("#toast"); $("#toastMsg").textContent=msg;
+  t.classList.toggle("err", !!isErr); t.classList.add("show");
+  clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"), 2200);
+}
+async function call(cmd, args){
+  try { const r = await invoke(cmd, args); return r==null?null:(typeof r==="string"?JSON.parse(r):r); }
+  catch(e){ toast(fmt(T.err, String(e)), true); throw e; }
+}
+const SVG = {
+  copy:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>',
+  expand:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>',
+  close:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
+  collapse:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>',
+  pin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="17" x2="12" y2="22"/><path d="M9 3h6l-1 6 3 3v2H7v-2l3-3z"/></svg>',
+  plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+  gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+};
+
+/* ---------- global state ---------- */
+let S = { prompts:[], recipes:[], variables:[], settings:{} };
+const WIN = new URLSearchParams(location.search).get("w") || "main";
+let selPromptId = null, selRecipeId = null, view = "prompts";
+let pvRecipeId; // undefined = follow selected_recipe
+let sbFilter = "", listFilter = "", recFilter = "";
+// Shift+click chain copy: texts collected so far. A plain click restarts the
+// chain with just the clicked prompt, Shift+click appends to it.
+let copyChain = [];
+
+const rById = id => S.recipes.find(r=>r.id===id);
+const pById = id => S.prompts.find(p=>p.id===id);
+
+async function refresh(keepUnsaved){
+  S = await call("state_snapshot");
+  if(!keepUnsaved) render();
+}
+
+/* =====================================================================
+   SIDEBAR window
+   ===================================================================== */
+function renderSidebar(){
+  document.body.className = "w-sidebar";
+  $("#app").innerHTML = `
+  <div id="sidebar">
+    <div class="sb-titlebar" data-tauri-drag-region>
+      <div class="logo" data-tauri-drag-region>PM</div>
+      <div class="name" data-tauri-drag-region>Prompt Manager</div>
+      <button class="icon-btn pin${S.settings.always_on_top?" on":""}" id="btnPin" title="${T.pinTitle}">${SVG.pin}</button>
+      <button class="icon-btn" id="btnExpand" title="Otevřít správu">${SVG.expand}</button>
+      <button class="icon-btn" id="btnHide" title="Skrýt (běží dál v liště)">${SVG.close}</button>
+    </div>
+    <div class="sb-search"><input id="sbSearch" type="text" placeholder="${T.search}" value="${esc(sbFilter)}"></div>
+    <div id="sbList"></div>
+    <div class="sb-foot">
+      <span id="sbCount"></span>
+      <span>${(S.settings.shortcut||"ctrl+alt+p").split("+").map(k=>`<span class="kbd">${esc(k)}</span>`).join("+")}</span>
+    </div>
+  </div>`;
+  $("#btnPin").onclick = async () => {
+    const on = !S.settings.always_on_top;
+    await call("set_always_on_top", { on });
+    S.settings.always_on_top = on;
+    $("#btnPin").classList.toggle("on", on);
+    toast(on ? T.pinOn : T.pinOff);
+  };
+  $("#btnExpand").onclick = async () => { await call("open_main"); };
+  $("#btnHide").onclick = async () => { await call("hide_sidebar"); };
+  $("#sbSearch").oninput = e => { sbFilter = e.target.value; renderSbList(); };
+  renderSbList();
+}
+
+function renderSbList(){
+  const box = $("#sbList");
+  const f = sbFilter.toLowerCase();
+  const items = S.prompts.filter(p=>p.title.toLowerCase().includes(f));
+  box.innerHTML = items.map(p=>{
+    const i = S.prompts.indexOf(p);
+    // the recipe sits on the SAME line as the title, styled as a badge so it
+    // reads as a recipe. A native <select> is used on purpose: its popup is
+    // drawn by the OS and so is never clipped by the narrow sidebar window.
+    let rsel = "";
+    if(p.recipes.length){
+      const opts = p.recipes.map(id=>{
+        const r=rById(id); if(!r) return "";
+        return `<option value="${esc(id)}" ${p.selected_recipe===id?"selected":""}>${esc(r.name)}</option>`;
+      }).join("");
+      const cur = p.selected_recipe ? (rById(p.selected_recipe)?.name || "?") : T.raw;
+      rsel = `<select class="rsel" data-p="${esc(p.id)}" title="${esc(cur)}">${opts}<option value="" ${!p.selected_recipe?"selected":""}>${T.raw}</option></select>`;
+    }
+    return `<div class="sb-item" data-idx="${i}" data-id="${esc(p.id)}">
+      <div class="row">
+        <span class="grip" title="Přetažením změníte pořadí">⋮⋮</span>
+        <span class="title" title="${esc(p.title)}">${esc(p.title)}</span>
+        ${rsel}
+        <button class="copy-btn" data-copy="${esc(p.id)}" title="${T.copy}">${SVG.copy}</button>
+      </div></div>`;
+  }).join("");
+  $("#sbCount").textContent = fmt(T.promptsCount, S.prompts.length);
+
+  box.querySelectorAll("select[data-p]").forEach(sel=>{
+    sel.onchange = async () => {
+      const p = pById(sel.dataset.p);
+      p.selected_recipe = sel.value || null;
+      await call("set_selected_recipe", { promptId: p.id, recipeId: sel.value || null });
+    };
+  });
+  box.querySelectorAll("[data-copy]").forEach(btn=>{
+    btn.onclick = async (e) => {
+      const p = pById(btn.dataset.copy);
+      const rid = p.recipes.length ? (p.selected_recipe || null) : null;
+      // render (no clipboard side effect), chain in the frontend, write once
+      const out = await call("render_prompt", { promptId: p.id, recipeId: rid });
+      if(e.shiftKey) copyChain.push(out.text); else copyChain = [out.text];
+      await call("copy_text", { text: copyChain.join("\n\n") });
+      if(copyChain.length > 1) toast(fmt(T.copiedChain, copyChain.length));
+      else toast(rid ? fmt(T.copiedWith, rById(rid)?.name || "?") : (p.recipes.length ? T.copiedRaw : T.copied));
+    };
+  });
+  makeSortable(box, ".sb-item");
+}
+
+/* =====================================================================
+   drag & drop reorder (shared)
+   ===================================================================== */
+function makeSortable(container, itemSel){
+  let fromIdx = null;
+  container.addEventListener("mousedown", e=>{
+    const it = e.target.closest(itemSel); if(!it) return;
+    it.draggable = !!e.target.closest(".grip");
+  });
+  container.addEventListener("dragstart", e=>{
+    const it = e.target.closest(itemSel);
+    if(!it || it.dataset.idx===undefined){ return; }
+    fromIdx = +it.dataset.idx;
+    it.classList.add("dragging");
+    e.dataTransfer.setData("text/plain","reorder");
+    e.dataTransfer.effectAllowed="move";
+  });
+  container.addEventListener("dragover", e=>{
+    if(fromIdx===null) return;
+    e.preventDefault();
+    container.querySelectorAll(".drop-before,.drop-after").forEach(x=>x.classList.remove("drop-before","drop-after"));
+    const it = e.target.closest(itemSel);
+    if(!it || +it.dataset.idx===fromIdx) return;
+    const r = it.getBoundingClientRect();
+    it.classList.add(e.clientY < r.top + r.height/2 ? "drop-before" : "drop-after");
+  });
+  container.addEventListener("drop", async e=>{
+    if(fromIdx===null) return;
+    e.preventDefault();
+    const it = e.target.closest(itemSel);
+    container.querySelectorAll(".drop-before,.drop-after").forEach(x=>x.classList.remove("drop-before","drop-after"));
+    if(it){
+      let to = +it.dataset.idx;
+      const r = it.getBoundingClientRect();
+      if(e.clientY >= r.top + r.height/2) to++;
+      const arr = S.prompts;
+      const [moved] = arr.splice(fromIdx,1);
+      if(to>fromIdx) to--;
+      arr.splice(to,0,moved);
+      await call("reorder_prompts", { idsJson: JSON.stringify(arr.map(p=>p.id)) });
+      toast(T.orderSaved);
+    }
+    fromIdx=null; render();
+  });
+  container.addEventListener("dragend", ()=>{
+    fromIdx=null;
+    container.querySelectorAll(".dragging,.drop-before,.drop-after")
+      .forEach(x=>x.classList.remove("dragging","drop-before","drop-after"));
+  });
+}
+
+/* =====================================================================
+   MAIN window
+   ===================================================================== */
+function renderMain(){
+  document.body.className = "w-main";
+  $("#app").innerHTML = `
+  <div id="main">
+    <div class="topbar">
+      <div class="logo">PM</div>
+      <div class="name">Prompt Manager</div>
+      <nav class="nav">
+        <button id="navPrompts" class="${view==="prompts"?"on":""}">${T.prompts}</button>
+        <button id="navRecipes" class="${view==="recipes"?"on":""}">${T.recipes}</button>
+      </nav>
+      <button class="icon-btn" id="btnSettings" title="${T.settings}">${SVG.gear}</button>
+      <button class="icon-btn" id="btnCollapse" title="Zmenšit do sidebaru">${SVG.collapse}</button>
+    </div>
+    <div class="varbar">
+      <span class="vb-label">${T.variables}</span>
+      <span id="chips"></span>
+      <span class="vb-auto">${T.varAuto}</span>
+    </div>
+    <div class="body2">
+      <div class="pane-left">
+        <div class="pane-search"><input id="listSearch" type="text" placeholder="${view==="prompts"?T.search:T.searchRecipe}"></div>
+        <button class="btn-new" id="btnNew">${view==="prompts"?T.newPrompt:T.newRecipe}</button>
+        <div class="pane-list" id="paneList"></div>
+      </div>
+      <div class="detail" id="detail"></div>
+    </div>
+  </div>`;
+  $("#navPrompts").onclick = ()=>{ view="prompts"; render(); };
+  $("#navRecipes").onclick = ()=>{ view="recipes"; render(); };
+  $("#btnSettings").onclick = openSettings;
+  $("#btnCollapse").onclick = async ()=>{ await call("toggle_sidebar"); await call("hide_main"); };
+  $("#listSearch").oninput = e=>{ if(view==="prompts") listFilter=e.target.value; else recFilter=e.target.value; renderList(); };
+  $("#listSearch").value = view==="prompts"?listFilter:recFilter;
+  $("#btnNew").onclick = async ()=>{
+    if(view==="prompts"){
+      const p = await call("create_prompt",{title:T.newPromptName, content:""});
+      await refresh(true); selPromptId = p.id; render();
+    } else {
+      const r = await call("create_recipe",{name:T.newRecipeName});
+      await refresh(true); selRecipeId = r.id; render();
+    }
+  };
+  renderChips();
+  renderList();
+  renderDetail();
+}
+
+/* true when the open prompt has unsaved edits - renaming a variable rewrites
+   prompt files on disk, which would silently throw those edits away */
+function promptIsDirty(){
+  const ta = $("#pContent"), ti = $("#pTitle");
+  const p = pById(selPromptId);
+  if(!ta || !p) return false;
+  return ta.value !== p.content || (ti && ti.value !== p.title);
+}
+
+/* Turns a chip into an inline text field. Dragging must be switched off while
+   editing, otherwise the draggable ancestor swallows clicks inside the input. */
+function chipEdit(chip, initial, onCommit, onCancel){
+  const wasDraggable = chip.draggable;
+  chip.draggable = false;
+  chip.classList.add("editing");
+  chip.innerHTML = `<span class="dot"></span><input class="chip-in" value="${esc(initial)}" size="${Math.max(initial.length,8)}">`;
+  const inp = chip.querySelector(".chip-in");
+  inp.focus(); inp.select();
+  let done = false;
+  const finish = ok => {
+    if(done) return; done = true;
+    chip.draggable = wasDraggable;
+    const raw = inp.value.trim().toLowerCase().replace(/[^a-z0-9_]/g,"_");
+    if(ok && raw && raw !== initial) onCommit(raw); else onCancel();
+  };
+  inp.addEventListener("keydown", e=>{
+    if(e.key === "Enter"){ e.preventDefault(); finish(true); }
+    else if(e.key === "Escape"){ e.preventDefault(); finish(false); }
+  });
+  inp.addEventListener("blur", ()=>finish(true));
+}
+
+/* One click on a variable chip "uses" it: in the prompt editor it inserts
+   {{name}} at the caret, in the recipe editor it jumps to that value field.
+   Drag & drop does the same thing but needs the OS drag layer - this is the
+   keyboard-free path that always works. */
+function useVariable(name){
+  if(view === "recipes"){
+    const inp = $("#vtRows")?.querySelector(`.nm[data-k="${CSS.escape(name)}"]`)
+      ?.parentElement?.querySelector("input");
+    if(inp){ inp.scrollIntoView({block:"nearest"}); inp.focus(); inp.select(); }
+    else toast(T.selectRecipe, true);
+    return;
+  }
+  const ta = $("#pContent");
+  if(!ta){ toast(T.noEditor, true); return; }
+  const ins = `{{${name}}}`;
+  const start = ta.selectionStart ?? ta.value.length;
+  const end = ta.selectionEnd ?? start;
+  ta.value = ta.value.slice(0,start) + ins + ta.value.slice(end);
+  ta.selectionStart = ta.selectionEnd = start + ins.length;
+  ta.focus();
+  // the editor's own "input" listener refreshes the placeholder pills + preview
+  ta.dispatchEvent(new Event("input", { bubbles:true }));
+  toast(fmt(T.inserted, name));
+}
+
+function renderChips(){
+  const box = $("#chips"); if(!box) return;
+  box.innerHTML = S.variables.map(v=>{
+    const filled = v.recipes.filter(u=>u.value).length;
+    const tip = v.recipes.map(u=>`${u.recipe_name}: ${u.value || "—"}`).join("\n");
+    // "filled/total" replaces the old "in N recipes" - every recipe now holds
+    // every variable, so the useful number is how many actually have a value
+    return `<span class="chip" draggable="true" data-var="${esc(v.name)}" title="${esc(tip)}"><span class="dot"></span><span class="nm">${esc(v.name)}</span><span class="cnt">${fmt(T.filledIn, filled, v.recipes.length)}</span><span class="chip-x" title="${T.del}">✕</span></span>`;
+  }).join(" ") + `<span class="chip chip-add" id="chipAdd" title="${T.addVarTitle}">${SVG.plus}</span>`;
+
+  let clickT = 0;   // shared: a dblclick (rename) must cancel the pending insert
+  box.querySelectorAll(".chip[data-var]").forEach(ch=>{
+    ch.addEventListener("dragstart", e=>{
+      e.dataTransfer.setData("text/plain","var:"+ch.dataset.var);
+      e.dataTransfer.effectAllowed="copy";
+    });
+    // insert on click (delayed so the rename dblclick below can cancel it)
+    ch.addEventListener("click", e=>{
+      if(e.target.closest(".chip-x") || ch.classList.contains("editing")) return;
+      clearTimeout(clickT);
+      const name = ch.dataset.var;
+      clickT = setTimeout(()=>useVariable(name), 230);
+    });
+    // delete
+    const x = ch.querySelector(".chip-x");
+    x.addEventListener("mousedown", e=>e.stopPropagation());
+    x.addEventListener("click", async e=>{
+      e.stopPropagation();
+      const name = ch.dataset.var;
+      const used = await call("variable_usage", { name });
+      const ok = used.length
+        ? confirm(fmt(T.confirmDelVar, name, used.join(", ")))
+        : confirm(fmt(T.confirmDelVar0, name));
+      if(!ok) return;
+      await call("delete_variable", { name });
+      await refresh(true); render(); toast(fmt(T.varDeleted, name));
+    });
+    // rename
+    ch.addEventListener("dblclick", e=>{
+      e.preventDefault();
+      clearTimeout(clickT);          // do not also insert the placeholder
+      if(promptIsDirty()){ toast(T.dirtyWarn); return; }
+      const oldName = ch.dataset.var;
+      chipEdit(ch, oldName, async newName=>{
+        try {
+          await call("rename_variable", { oldName, newName });
+          await refresh(true); render(); toast(fmt(T.varRenamed, newName));
+        } catch(err){ renderChips(); }
+      }, renderChips);
+    });
+  });
+
+  const add = box.querySelector("#chipAdd");
+  if(add) add.addEventListener("click", ()=>{
+    chipEdit(add, "", async name=>{
+      try {
+        await call("add_variable", { name });
+        await refresh(true); render(); toast(fmt(T.varAddedG, name));
+      } catch(err){ renderChips(); }
+    }, renderChips);
+  });
+}
+
+/* shared by the red ✕ in the prompt list and the Delete button in the editor */
+async function deletePromptFlow(id){
+  const p = pById(id); if(!p) return;
+  if(!confirm(fmt(T.confirmDelPrompt, p.title))) return;
+  await call("delete_prompt", { id });
+  if(selPromptId === id) selPromptId = null;
+  await refresh();
+}
+
+/* shared by the red ✕ in the recipe list and the Delete button in the editor */
+async function deleteRecipeFlow(id){
+  const r = rById(id); if(!r) return;
+  const usage = await call("recipe_usage", { id });
+  const q = usage.length ? fmt(T.confirmDelRecipe, r.name, usage.join(", ")) : fmt(T.confirmDelRecipe0, r.name);
+  if(!confirm(q)) return;
+  await call("delete_recipe", { id });
+  if(selRecipeId === id) selRecipeId = null;
+  await refresh();
+}
+
+function renderList(){
+  const box = $("#paneList"); if(!box) return;
+  if(view==="prompts"){
+    const f = listFilter.toLowerCase();
+    box.innerHTML = S.prompts.filter(p=>p.title.toLowerCase().includes(f)).map(p=>{
+      const i = S.prompts.indexOf(p);
+      return `<div class="li ${p.id===selPromptId?"sel":""}" data-idx="${i}" data-id="${esc(p.id)}">
+        <span class="grip">⋮⋮</span>
+        <span class="tt"><span class="t">${esc(p.title)}</span>
+        <span class="m">${fmt(T.recCount, p.recipes.length)}</span></span>
+        <button class="li-del" data-delp="${esc(p.id)}" title="${T.del}">✕</button>
+      </div>`;
+    }).join("");
+    box.querySelectorAll(".li").forEach(el=>{
+      el.addEventListener("click", ()=>{ selPromptId = el.dataset.id; pvRecipeId = undefined; renderList(); renderDetail(); });
+    });
+    box.querySelectorAll(".li-del").forEach(btn=>{
+      btn.addEventListener("click", async e=>{
+        e.stopPropagation();          // the row itself selects on click
+        await deletePromptFlow(btn.dataset.delp);
+      });
+    });
+    makeSortable(box, ".li");
+  } else {
+    const f = recFilter.toLowerCase();
+    box.innerHTML = S.recipes.filter(r=>r.name.toLowerCase().includes(f)).map(r=>{
+      const used = S.prompts.filter(p=>p.recipes.includes(r.id)).length;
+      const vals = Object.values(r.values);
+      const filled = vals.filter(v=>v).length;
+      return `<div class="li ${r.id===selRecipeId?"sel":""}" data-id="${esc(r.id)}">
+        <span class="tt"><span class="t">${esc(r.name)}</span>
+        <span class="m">${fmt(T.usedIn, fmt(T.filledIn, filled, vals.length), used)}</span></span>
+        <button class="li-del" data-del="${esc(r.id)}" title="${T.del}">✕</button>
+      </div>`;
+    }).join("");
+    box.querySelectorAll(".li").forEach(el=>{
+      el.addEventListener("click", ()=>{ selRecipeId = el.dataset.id; renderList(); renderDetail(); });
+    });
+    box.querySelectorAll(".li-del").forEach(btn=>{
+      btn.addEventListener("click", async e=>{
+        e.stopPropagation();          // the row itself selects on click
+        await deleteRecipeFlow(btn.dataset.del);
+      });
+    });
+  }
+}
+
+function renderDetail(){
+  const box = $("#detail"); if(!box) return;
+  if(view==="prompts") renderPromptDetail(box);
+  else renderRecipeDetail(box);
+}
+
+/* ---------- prompt detail ---------- */
+function renderPromptDetail(box){
+  const p = pById(selPromptId);
+  if(!p){ box.innerHTML = `<div class="empty-detail">${T.selectPrompt}</div>`; return; }
+  const pvId = pvRecipeId!==undefined ? pvRecipeId : (p.selected_recipe || (p.recipes[0]??null));
+  box.innerHTML = `
+  <div class="detail-pad">
+    <div class="field"><label>${T.name}</label><input type="text" id="pTitle" value="${esc(p.title)}"></div>
+    <div class="field">
+      <label>${T.content}</label>
+      <textarea class="editor" id="pContent" spellcheck="false">${esc(p.content)}</textarea>
+      <div class="ed-hint">${esc(T.edHint)}</div>
+      <div class="ph-chips" id="phChips"></div>
+    </div>
+    <div class="field">
+      <label>${T.assigned}</label>
+      <div class="msel" id="msel">
+        <button class="msel-btn" id="mselBtn"><span id="mselLabel"></span><span class="car">▾</span></button>
+        <div class="msel-panel" id="mselPanel">
+          <div class="ms-search"><input id="msSearch" type="text" placeholder="${T.searchRecipe}"></div>
+          <div class="msel-list" id="mselList"></div>
+          <div class="msel-foot">${T.msFoot}</div>
+        </div>
+      </div>
+      <div class="rtags" id="rtags"></div>
+    </div>
+    <div class="field">
+      <div class="pv-head"><label style="margin:0">${T.preview}</label><select id="pvSel"></select></div>
+      <div class="preview" id="preview"></div>
+      <div class="pv-warn hidden" id="pvWarn"></div>
+    </div>
+    <div class="actions">
+      <button class="btn primary" id="btnSave">${T.save}</button>
+      <button class="btn secondary" id="btnCopy">${SVG.copy} ${T.copy}</button>
+      <button class="btn secondary" id="btnDup">${T.duplicate}</button>
+      <button class="btn danger" id="btnDel">${T.del}</button>
+    </div>
+  </div>`;
+
+  const updatePhChips = ()=>{
+    const phs=[...new Set([...$("#pContent").value.matchAll(/\{\{([a-z0-9_]+)\}\}/g)].map(m=>m[1]))];
+    $("#phChips").innerHTML = phs.map(x=>`<span class="ph-pill">{{${esc(x)}}}</span>`).join("");
+  };
+  updatePhChips();
+  $("#pContent").addEventListener("input", ()=>{ updatePhChips(); updatePreview(); });
+
+  // drag&drop variable chip into textarea, dropped at the exact mouse position
+  const ta = $("#pContent");
+  let dragRaf = 0;
+  ta.addEventListener("dragover", e=>{
+    e.preventDefault(); e.dataTransfer.dropEffect="copy"; ta.classList.add("dragover");
+    // Move the caret under the cursor and keep it visible. The native blinking
+    // caret then IS the drop marker, and the drop handler below inserts at that
+    // same caret - no custom marker element needed. Throttled: dragover floods.
+    if(dragRaf) return;
+    const x=e.clientX, y=e.clientY;
+    dragRaf = requestAnimationFrame(()=>{
+      dragRaf = 0;
+      const off = offsetFromPoint(ta, x, y);
+      if(off!=null){ ta.focus(); ta.selectionStart = ta.selectionEnd = off; }
+    });
+  });
+  ta.addEventListener("dragleave", ()=>ta.classList.remove("dragover"));
+  ta.addEventListener("drop", e=>{
+    e.preventDefault(); ta.classList.remove("dragover");
+    const d = e.dataTransfer.getData("text/plain");
+    if(!d.startsWith("var:")) return;
+    const v = d.slice(4);
+    const ins = `{{${v}}}`;
+    const off = offsetFromPoint(ta, e.clientX, e.clientY);
+    const start = off!=null ? off : (ta.selectionStart ?? ta.value.length);
+    ta.value = ta.value.slice(0,start) + ins + ta.value.slice(start);
+    ta.selectionStart = ta.selectionEnd = start + ins.length;
+    ta.focus();
+    updatePhChips(); updatePreview();
+    toast(fmt(T.inserted, v));
+  });
+
+  // multi-select
+  const renderMsel = (filter="")=>{
+    const f=filter.toLowerCase();
+    $("#mselList").innerHTML = S.recipes.filter(r=>r.name.toLowerCase().includes(f)).map(r=>
+      `<label><input type="checkbox" data-r="${esc(r.id)}" ${p.recipes.includes(r.id)?"checked":""}>
+       ${esc(r.name)}<span class="vcnt">${Object.values(r.values).filter(v=>v).length}/${Object.keys(r.values).length}</span></label>`).join("");
+    $("#mselLabel").textContent = `${T.assigned} (${p.recipes.length} z ${S.recipes.length})`;
+    $("#mselList").querySelectorAll("input[data-r]").forEach(cb=>{
+      cb.onchange = ()=>{
+        const id=cb.dataset.r;
+        if(cb.checked && !p.recipes.includes(id)) p.recipes.push(id);
+        if(!cb.checked) p.recipes = p.recipes.filter(x=>x!==id);
+        if(p.selected_recipe && !p.recipes.includes(p.selected_recipe)) p.selected_recipe = p.recipes[0]||null;
+        if(pvRecipeId!==undefined && pvRecipeId && !p.recipes.includes(pvRecipeId)) pvRecipeId=undefined;
+        renderMsel($("#msSearch").value); renderTags(); renderPvSel(); updatePreview();
+      };
+    });
+  };
+  const renderTags = ()=>{
+    $("#rtags").innerHTML = p.recipes.map(id=>{
+      const r=rById(id); if(!r) return "";
+      return `<span class="rtag">${esc(r.name)}<i data-un="${esc(id)}" title="Odebrat">✕</i></span>`;
+    }).join("");
+    $("#rtags").querySelectorAll("[data-un]").forEach(x=>{
+      x.onclick = ()=>{
+        p.recipes = p.recipes.filter(i=>i!==x.dataset.un);
+        if(p.selected_recipe===x.dataset.un) p.selected_recipe=p.recipes[0]||null;
+        renderMsel($("#msSearch").value); renderTags(); renderPvSel(); updatePreview();
+      };
+    });
+  };
+  $("#mselBtn").onclick = e=>{ e.stopPropagation(); $("#mselPanel").classList.toggle("open"); };
+  document.addEventListener("click", e=>{ if(!e.target.closest("#msel")) $("#mselPanel")?.classList.remove("open"); });
+  $("#msSearch").oninput = e=>renderMsel(e.target.value);
+
+  // preview
+  const renderPvSel = ()=>{
+    const cur = pvRecipeId!==undefined ? pvRecipeId : (p.selected_recipe || (p.recipes[0]??null));
+    $("#pvSel").innerHTML = p.recipes.map(id=>{
+      const r=rById(id); if(!r) return "";
+      return `<option value="${esc(id)}" ${cur===id?"selected":""}>${esc(r.name)}</option>`;
+    }).join("") + `<option value="" ${!cur?"selected":""}>${T.raw}</option>`;
+    $("#pvSel").onchange = ()=>{ pvRecipeId = $("#pvSel").value || null; updatePreview(); };
+  };
+  const updatePreview = ()=>{
+    const rid = $("#pvSel").value || null;
+    const content = $("#pContent").value;
+    const vals = rid ? (rById(rid)?.values || {}) : null;
+    let missing = [];
+    const html = esc(content).replace(/\{\{([a-z0-9_]+)\}\}/g,(all,k)=>{
+      // an empty value counts as missing, matching copy_prompt exactly
+      if(vals && vals[k]) return `<span class="fill">${esc(vals[k])}</span>`;
+      if(rid){ if(!missing.includes(k)) missing.push(k); }
+      return `<span class="ph">{{${esc(k)}}}</span>`;
+    });
+    $("#preview").innerHTML = html || "<i style='color:var(--faint)'>prázdný obsah</i>";
+    const w=$("#pvWarn");
+    if(rid && missing.length){ w.classList.remove("hidden"); w.textContent = fmt(T.missingWarn, missing.length); }
+    else w.classList.add("hidden");
+  };
+
+  renderMsel(); renderTags(); renderPvSel(); updatePreview();
+
+  // actions
+  $("#btnSave").onclick = async ()=>{
+    const saved = await call("save_prompt", { promptJson: JSON.stringify({
+      id:p.id, title:$("#pTitle").value, content:$("#pContent").value,
+      recipes:p.recipes, selected_recipe:p.selected_recipe }) });
+    await refresh(true); selPromptId = saved.id; render(); toast(T.saved);
+  };
+  $("#btnCopy").onclick = async ()=>{
+    const rid = $("#pvSel").value || null;
+    await call("save_prompt", { promptJson: JSON.stringify({
+      id:p.id, title:$("#pTitle").value, content:$("#pContent").value,
+      recipes:p.recipes, selected_recipe:p.selected_recipe }) });
+    await call("copy_prompt", { promptId: p.id, recipeId: rid });
+    toast(rid ? fmt(T.copiedWith, rById(rid)?.name||"?") : T.copiedRaw);
+  };
+  $("#btnDup").onclick = async ()=>{
+    const d = await call("duplicate_prompt", { id: p.id });
+    await refresh(true); selPromptId = d.id; render();
+  };
+  $("#btnDel").onclick = ()=> deletePromptFlow(p.id);
+}
+
+/* ---------- recipe detail ---------- */
+function renderRecipeDetail(box){
+  const r = rById(selRecipeId);
+  if(!r){ box.innerHTML = `<div class="empty-detail">${T.selectRecipe}</div>`; return; }
+  // Rows come from the GLOBAL variable list, not from Object.entries(r.values):
+  // recipe JSON is serialized through a map, so its key order is alphabetical
+  // rather than the stored order. Variables are added/removed in the top bar
+  // only, so this editor edits values and nothing else.
+  const rows = S.variables.map(v=>({k:v.name, v:r.values[v.name] ?? ""}));
+
+  box.innerHTML = `
+  <div class="detail-pad">
+    <div class="field"><label>${T.recipeName}</label><input type="text" id="rName" value="${esc(r.name)}"></div>
+    <div class="field">
+      <label>${T.recipeVars}</label>
+      <div class="vtable" id="vtable">
+        <div class="vt-head"><span>${T.varName}</span><span>${T.varValue}</span></div>
+        <div id="vtRows"></div>
+      </div>
+    </div>
+    <div class="actions">
+      <button class="btn primary" id="btnSaveR">${T.saveRecipe}</button>
+      <button class="btn secondary" id="btnDupR">${T.duplicate}</button>
+      <button class="btn danger" id="btnDelR">${T.del}</button>
+    </div>
+  </div>`;
+
+  const renderRows = ()=>{
+    $("#vtRows").innerHTML = rows.length ? rows.map((row,i)=>`
+      <div class="vt-row">
+        <span class="nm" data-k="${esc(row.k)}">${esc(row.k)}</span>
+        <input data-i="${i}" value="${esc(row.v)}" spellcheck="false" placeholder="—">
+      </div>`).join("") : `<div class="vt-empty">${T.emptyVars}</div>`;
+    $("#vtRows").querySelectorAll("input").forEach(inp=>{
+      inp.onchange = ()=>{ rows[+inp.dataset.i].v = inp.value; };
+    });
+  };
+  renderRows();
+
+  // dropping a chip here no longer adds a row (every variable is always
+  // present) - it jumps to that variable's value field instead, so the
+  // gesture still does something sensible
+  const vt = $("#vtable");
+  vt.addEventListener("dragover", e=>{ e.preventDefault(); e.dataTransfer.dropEffect="copy"; vt.classList.add("dragover"); });
+  vt.addEventListener("dragleave", ()=>vt.classList.remove("dragover"));
+  vt.addEventListener("drop", e=>{
+    e.preventDefault(); vt.classList.remove("dragover");
+    const d = e.dataTransfer.getData("text/plain");
+    if(!d.startsWith("var:")) return;
+    const i = rows.findIndex(x=>x.k === d.slice(4));
+    if(i < 0) return;
+    const inp = $("#vtRows").querySelector(`input[data-i="${i}"]`);
+    if(inp){ inp.scrollIntoView({block:"nearest"}); inp.focus(); inp.select(); }
+  });
+
+  $("#btnSaveR").onclick = async ()=>{
+    const values = {}; const order = [];
+    for(const row of rows){ if(!row.k) continue; values[row.k]=row.v; order.push(row.k); }
+    const saved = await call("save_recipe", { recipeJson: JSON.stringify({
+      id:r.id, name:$("#rName").value, values, values_order:order }) });
+    await refresh(true); selRecipeId = saved.id; render(); toast(T.recipeSaved);
+  };
+  $("#btnDupR").onclick = async ()=>{
+    const d = await call("create_recipe", { name: r.name + " (kopie)" });
+    const values = {}; rows.forEach(row=>{ if(row.k) values[row.k]=row.v; });
+    await call("save_recipe", { recipeJson: JSON.stringify({ id:d.id, name:d.name, values }) });
+    await refresh(true); selRecipeId = d.id; render();
+  };
+  $("#btnDelR").onclick = ()=> deleteRecipeFlow(r.id);
+}
+
+/* ---------- settings modal ---------- */
+async function openSettings(){
+  const s = await call("get_settings");
+  const snippet = await call("mcp_config_snippet").catch(()=>null);
+  const div = document.createElement("div");
+  div.className = "modal-bg"; div.id = "settingsModal";
+  div.innerHTML = `
+  <div class="modal">
+    <h2>${T.settings}</h2>
+    <div class="field"><label>${T.library}</label>
+      <div class="roww"><input type="text" id="setLib" value="${esc(s.library_dir)}">
+      <button class="btn secondary" id="btnOpenLib">${T.openFolder}</button></div></div>
+    <div class="field"><label class="switch"><input type="checkbox" id="setApiOn" ${s.api_enabled?"checked":""}> ${T.apiEnabled}</label></div>
+    <div class="field"><label>${T.apiUrl}</label><input type="text" readonly value="http://127.0.0.1:${s.api_port}/api/v1/"></div>
+    <div class="field"><label>${T.apiKey}</label>
+      <div class="roww"><input type="text" readonly id="setKey" value="${esc(s.api_key)}">
+      <button class="btn secondary" id="btnCopyKey">${T.copyApiKey}</button>
+      <button class="btn secondary" id="btnRegen">${T.regen}</button></div></div>
+    <div class="field"><label>${T.shortcut}</label><input type="text" id="setShortcut" value="${esc(s.shortcut)}"></div>
+    <div class="field"><label>${T.mcpTitle}</label>
+      <pre id="mcpSnippet">${esc(typeof snippet==="string"?snippet:JSON.stringify(snippet,null,2))}</pre>
+      <button class="btn secondary" id="btnCopyMcp">${T.mcpCopy}</button></div>
+    <div class="close-row">
+      <button class="btn primary" id="btnSaveSet">${T.save}</button>
+      <button class="btn secondary" id="btnCloseSet">${T.close}</button>
+    </div>
+  </div>`;
+  document.body.appendChild(div);
+  div.addEventListener("click", e=>{ if(e.target===div) div.remove(); });
+  $("#btnCloseSet").onclick = ()=>div.remove();
+  $("#btnOpenLib").onclick = ()=>call("open_library_folder");
+  const clip = async text => {
+    if(IS_TAURI){ /* clipboard via backend render path not needed; use navigator with fallback */ }
+    try { await navigator.clipboard.writeText(text); toast(T.copied); }
+    catch(e){ toast(fmt(T.err,"clipboard"), true); }
+  };
+  $("#btnCopyKey").onclick = ()=>clip($("#setKey").value);
+  $("#btnCopyMcp").onclick = ()=>clip($("#mcpSnippet").textContent);
+  $("#btnRegen").onclick = async ()=>{
+    const ns = await call("save_settings",{settingsJson:JSON.stringify({regenerate_api_key:true})});
+    $("#setKey").value = ns.api_key; toast(T.saved);
+  };
+  $("#btnSaveSet").onclick = async ()=>{
+    await call("save_settings",{settingsJson:JSON.stringify({
+      library_dir: $("#setLib").value,
+      api_enabled: $("#setApiOn").checked,
+      shortcut: $("#setShortcut").value,
+    })});
+    div.remove(); toast(T.saved); refresh();
+  };
+}
+
+/* ---------- boot ---------- */
+function render(){
+  if(WIN==="sidebar") renderSidebar(); else renderMain();
+}
+(async function boot(){
+  await refresh();
+  onEvent("library-changed", async ()=>{ await refresh(); });
+})();
+</script>
+</body>
+</html>

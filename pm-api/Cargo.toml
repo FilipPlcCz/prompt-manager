@@ -1,0 +1,9 @@
+[package]
+name = "pm-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Prompt Manager local REST API (loopback only). Zero dependencies."
+
+[dependencies]
+pm-core = { path = "../pm-core" }

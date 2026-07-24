@@ -1,0 +1,8 @@
+[package]
+name = "pm-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Prompt Manager core: models, storage, template rendering. Zero dependencies."
+
+[dependencies]

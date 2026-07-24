@@ -1,0 +1,12 @@
+[workspace]
+resolver = "2"
+members = ["pm-core", "pm-api", "pm-mcp"]
+# src-tauri is intentionally excluded: it is its own workspace, because its
+# dependencies (tauri) need crates.io, while these core crates build and test
+# fully offline with zero dependencies.
+exclude = ["src-tauri"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"

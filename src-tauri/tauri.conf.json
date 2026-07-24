@@ -1,0 +1,58 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Prompt Manager",
+  "identifier": "com.promptmanager.app",
+  "version": "1.2.1",
+  "build": {
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "sidebar",
+        "title": "Prompt Manager",
+        "url": "index.html?w=sidebar",
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": false,
+        "resizable": true,
+        "visible": false,
+        "width": 190,
+        "height": 800,
+        "minWidth": 160,
+        "dragDropEnabled": false
+      },
+      {
+        "label": "main",
+        "title": "Prompt Manager — správa",
+        "url": "index.html?w=main",
+        "width": 1430,
+        "height": 975,
+        "minWidth": 1000,
+        "minHeight": 640,
+        "center": true,
+        "visible": false,
+        "dragDropEnabled": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "icon": ["icons/icon.ico", "icons/icon.png"],
+    "externalBin": ["binaries/prompt-manager-mcp"],
+    "windows": {
+      "nsis": {
+        "languages": ["Czech", "English"],
+        "customLanguageFiles": {
+          "Czech": "./installer/Czech.nsh"
+        },
+        "installMode": "currentUser"
+      }
+    }
+  }
+}

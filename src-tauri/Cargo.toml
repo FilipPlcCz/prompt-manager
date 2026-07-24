@@ -1,0 +1,27 @@
+[package]
+name = "prompt-manager"
+version = "1.2.1"
+edition = "2021"
+license = "MIT"
+description = "Prompt Manager – správa textových promptů (sidebar + plné okno + API)"
+default-run = "prompt-manager"
+
+# This crate is its own workspace (excluded from the root one) because its
+# dependencies (tauri) need crates.io, while the core crates build offline.
+[workspace]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+pm-core = { path = "../pm-core" }
+pm-api = { path = "../pm-api" }
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-global-shortcut = "2"
+# one process only: a second launch just brings the running one to the front
+tauri-plugin-single-instance = "2"
+
+[features]
+# by default Tauri ships with devtools in debug builds
+custom-protocol = ["tauri/custom-protocol"]
