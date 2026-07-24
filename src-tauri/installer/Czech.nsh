@@ -1,4 +1,4 @@
-﻿; Czech translation of Tauri's NSIS installer strings.
+; Czech translation of Tauri's NSIS installer strings.
 ; Tauri does not ship a Czech.nsh, so without this file every Tauri-specific
 ; text in the Czech installer/uninstaller renders as an empty string.
 ; Keys mirror crates/tauri-bundler/.../nsis/languages/English.nsh 1:1.
