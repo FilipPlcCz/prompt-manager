@@ -74,9 +74,9 @@
   .rsel:hover,.rsel:focus{background-color:var(--accent);color:#0b0d12}
   .rsel option{background:var(--panel2);color:var(--text);font-weight:400}
   .icon-btn.pin.on{color:var(--accent);background:var(--accent-soft)}
-  .sb-foot{border-top:1px solid var(--border);padding:5px 8px;font-size:.66rem;color:var(--faint)}
-  .sb-foot .row1{display:flex;justify-content:space-between;align-items:center}
-  .sb-hint{font-size:.6rem;color:var(--faint);margin-top:3px;opacity:.8}
+  .sb-foot{border-top:1px solid var(--border);padding:5px 8px;font-size:.66rem;color:var(--faint);
+    display:flex;justify-content:space-between;align-items:center;gap:6px;white-space:nowrap}
+  .sb-hint{font-size:.6rem;color:var(--faint);opacity:.8;overflow:hidden;text-overflow:ellipsis}
   /* hover preview of the rendered prompt (sidebar) */
   #sbPreview{position:fixed;left:5px;right:5px;z-index:60;background:var(--panel2);
     border:1px solid var(--border2);border-radius:8px;padding:8px 10px;
@@ -122,7 +122,7 @@
   .chip .cnt{color:var(--faint);font-size:.62rem;font-family:Consolas,monospace}
 
   .body2{flex:1;display:flex;min-height:0}
-  .pane-left{width:270px;flex:none;border-right:1px solid var(--border);display:flex;flex-direction:column;background:#141822}
+  .pane-left{width:270px;flex:none;border-right:1px solid var(--border);display:flex;flex-direction:column;background:#141822;min-height:0}
   .pane-search{padding:10px 10px 6px}
   .btn-new{margin:0 10px 8px;border:1px dashed var(--border2);background:transparent;color:var(--muted);
     border-radius:8px;padding:7px;font-size:.78rem;cursor:pointer}
@@ -137,14 +137,16 @@
   .li.sel .t{color:var(--accent)}
 
   .detail{flex:1;overflow-y:auto}
-  .detail-pad{padding:16px 20px 24px;display:flex;flex-direction:column;gap:14px;max-width:980px}
+  .detail-pad{padding:16px 20px 24px;display:flex;flex-direction:column;gap:14px}
   .field label{display:block;font-size:.7rem;color:var(--faint);text-transform:uppercase;letter-spacing:.7px;margin-bottom:6px}
   .field input[type=text]{width:100%;background:var(--panel2);border:1px solid var(--border);border-radius:8px;
     padding:9px 12px;font-size:.95rem;font-weight:600;outline:none}
   .field input[type=text]:focus{border-color:var(--accent)}
+  /* height is managed by autoGrow(): follows the text up to ~half the window,
+     so short prompts stay compact and long ones get room without dragging */
   textarea.editor{width:100%;background:#12151d;border:1px solid var(--border);border-radius:10px;padding:13px 15px;
-    min-height:170px;font-family:Consolas,"Cascadia Code",monospace;font-size:.85rem;line-height:1.6;color:#d7dce6;
-    outline:none;resize:vertical}
+    min-height:120px;font-family:Consolas,"Cascadia Code",monospace;font-size:.85rem;line-height:1.6;color:#d7dce6;
+    outline:none;resize:none;overflow-y:auto}
   textarea.editor:focus{border-color:var(--accent)}
   textarea.editor.dragover{border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
   .ed-hint{font-size:.7rem;color:var(--faint);margin-top:5px}
@@ -163,7 +165,7 @@
   .msel-panel .ms-search{padding:8px;border-bottom:1px solid var(--border)}
   .msel-panel .ms-search input{width:100%;background:var(--panel3);border:1px solid var(--border);border-radius:7px;
     padding:6px 9px;font-size:.76rem;outline:none}
-  .msel-list{max-height:220px;overflow-y:auto;padding:5px}
+  .msel-list{max-height:50vh;overflow-y:auto;padding:5px}
   .msel-list label{display:flex;align-items:center;gap:9px;padding:6px 8px;border-radius:7px;font-size:.78rem;cursor:pointer}
   .msel-list label:hover{background:var(--panel3)}
   .msel-list input{accent-color:var(--accent);width:14px;height:14px}
@@ -386,7 +388,8 @@ const T = {
   duplicate:"Duplikovat", raw:"— bez vyplnění (raw)", copied:"Zkopírováno do schránky",
   copiedWith:"Zkopírováno — recept „{0}“", copiedRaw:"Zkopírováno — raw text",
   copiedChain:"Ve schránce {0} promptů za sebou (Shift+klik přidává další)",
-  sbShiftHint:"Shift+klik na kopírovat řadí prompty do schránky za sebe",
+  sbShiftHint:"Shift+klik = kopie za sebe",
+  sbShiftHintLong:"Shift+klik na tlačítko kopírovat řadí prompty do schránky za sebe",
   saved:"Uloženo ✓", recipeSaved:"Recept uložen ✓", orderSaved:"Pořadí uloženo",
   variables:"Proměnné", varAuto:"klik vloží · ✕ smazat · dvojklik přejmenovat · + přidat",
   varDrop:"přetažením vložíte proměnnou do receptu",
@@ -537,11 +540,8 @@ function renderSidebar(){
     <div class="sb-search"><input id="sbSearch" type="text" placeholder="${T.search}" value="${esc(sbFilter)}"></div>
     <div id="sbList"></div>
     <div class="sb-foot">
-      <div class="row1">
-        <span id="sbCount"></span>
-        <span>${(S.settings.shortcut||"ctrl+alt+p").split("+").map(k=>`<span class="kbd">${esc(k)}</span>`).join("+")}</span>
-      </div>
-      <div class="sb-hint">${T.sbShiftHint}</div>
+      <span class="sb-hint" title="${T.sbShiftHintLong}">${T.sbShiftHint}</span>
+      <span>${(S.settings.shortcut||"ctrl+alt+p").split("+").map(k=>`<span class="kbd">${esc(k)}</span>`).join("+")}</span>
     </div>
     <div id="sbPreview" class="hidden"></div>
   </div>`;
@@ -615,7 +615,6 @@ function renderSbList(){
         <button class="copy-btn" data-copy="${esc(p.id)}" title="${T.copy}">${SVG.copy}</button>
       </div></div>`;
   }).join("");
-  $("#sbCount").textContent = fmt(T.promptsCount, S.prompts.length);
 
   box.querySelectorAll("select[data-p]").forEach(sel=>{
     sel.onchange = async () => {
@@ -997,6 +996,19 @@ function renderPromptDetail(box){
 
   // drag&drop variable chip into textarea, dropped at the exact mouse position
   const ta = $("#pContent");
+
+  // auto-height: grow with the text up to ~50 % of the window, shrink back
+  // when text is deleted; re-fit on window resize (guard: the old handler
+  // unhooks itself once its textarea is replaced by a re-render)
+  const autoGrow = ()=>{
+    if(!document.contains(ta)){ window.removeEventListener("resize", autoGrow); return; }
+    ta.style.height = "auto";
+    const max = Math.max(160, Math.round(window.innerHeight*0.5));
+    ta.style.height = Math.min(ta.scrollHeight + 2, max) + "px";
+  };
+  autoGrow();
+  ta.addEventListener("input", autoGrow);
+  window.addEventListener("resize", autoGrow);
   let dragRaf = 0;
   ta.addEventListener("dragover", e=>{
     e.preventDefault(); e.dataTransfer.dropEffect="copy"; ta.classList.add("dragover");

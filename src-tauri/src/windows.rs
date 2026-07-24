@@ -54,8 +54,11 @@ pub fn toggle_sidebar(app: &AppHandle) -> Result<(), String> {
     if win.is_visible().map_err(|e| e.to_string())? {
         win.hide().map_err(|e| e.to_string())?;
     } else {
-        position_sidebar(app)?;
+        // show BEFORE positioning: WebView2 does not re-layout the page of a
+        // hidden window, so resizing first left the content at the old height
+        // (visible as an unfilled window once the list grew long)
         win.show().map_err(|e| e.to_string())?;
+        position_sidebar(app)?;
         win.set_focus().map_err(|e| e.to_string())?;
     }
     Ok(())
@@ -65,8 +68,8 @@ pub fn show_sidebar(app: &AppHandle) -> Result<(), String> {
     let win = app
         .get_webview_window("sidebar")
         .ok_or("sidebar window missing")?;
-    position_sidebar(app)?;
     win.show().map_err(|e| e.to_string())?;
+    position_sidebar(app)?;
     win.set_focus().map_err(|e| e.to_string())?;
     Ok(())
 }
