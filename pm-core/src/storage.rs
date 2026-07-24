@@ -73,10 +73,22 @@ impl Library {
                 continue;
             }
             let name = file_name(&path);
-            let text = fs::read_to_string(&path)?;
+            // A single unreadable/corrupt file must not blank the whole
+            // library (the UI would show no prompts although the rest is
+            // fine) - skip it and keep going.
+            let text = match fs::read_to_string(&path) {
+                Ok(t) => t,
+                Err(e) => {
+                    eprintln!("skipping unreadable prompt {}: {}", name, e);
+                    continue;
+                }
+            };
             match Prompt::from_markdown(&text, &name) {
                 Ok(p) => prompts.push(p),
-                Err(e) => return Err(StoreError::Parse(name, e)),
+                Err(e) => {
+                    eprintln!("skipping corrupt prompt {}: {}", name, e);
+                    continue;
+                }
             }
         }
         let order = self.load_order()?;
@@ -237,10 +249,20 @@ impl Library {
                 continue;
             }
             let name = file_name(&path);
-            let text = fs::read_to_string(&path)?;
+            // same leniency as list_prompts: one bad file must not blank all
+            let text = match fs::read_to_string(&path) {
+                Ok(t) => t,
+                Err(e) => {
+                    eprintln!("skipping unreadable recipe {}: {}", name, e);
+                    continue;
+                }
+            };
             match Recipe::from_yaml(&text, &name) {
                 Ok(r) => recipes.push(r),
-                Err(e) => return Err(StoreError::Parse(name, e)),
+                Err(e) => {
+                    eprintln!("skipping corrupt recipe {}: {}", name, e);
+                    continue;
+                }
             }
         }
         recipes.sort_by(|a, b| {
@@ -1049,6 +1071,22 @@ mod tests {
         std::thread::sleep(std::time::Duration::from_millis(30));
         lib.save_prompt(&p2).unwrap();
         assert_ne!(f1, lib.fingerprint());
+    }
+
+    #[test]
+    fn corrupt_file_does_not_blank_the_library() {
+        let lib = tmp_lib("corrupt");
+        lib.create_prompt("Dobrý", "obsah").unwrap();
+        let r = lib.create_recipe("Recept").unwrap();
+        // a torn/garbage file next to the healthy ones
+        fs::write(lib.prompts_dir().join("torn.md"), "---\nid: bez konce").unwrap();
+        fs::write(lib.recipes_dir().join("torn.yaml"), "\u{0}\u{0}\u{0}").unwrap();
+        let prompts = lib.list_prompts().unwrap();
+        assert_eq!(prompts.len(), 1);
+        assert_eq!(prompts[0].title, "Dobrý");
+        let recipes = lib.list_recipes().unwrap();
+        assert_eq!(recipes.len(), 1);
+        assert_eq!(recipes[0].id, r.id);
     }
 
     #[test]

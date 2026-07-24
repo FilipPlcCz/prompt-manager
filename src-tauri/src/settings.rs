@@ -140,7 +140,17 @@ impl Settings {
             "sidebar_ratio".to_string(),
             Json::Num(self.sidebar_ratio),
         );
-        std::fs::write(settings_path(), Json::Obj(o).pretty())
+        // atomic: a crash/kill mid-write must not leave settings.json torn
+        let path = settings_path();
+        let tmp = path.with_extension("tmp~");
+        std::fs::write(&tmp, Json::Obj(o).pretty())?;
+        match std::fs::rename(&tmp, &path) {
+            Ok(()) => Ok(()),
+            Err(_) => {
+                let _ = std::fs::remove_file(&path);
+                std::fs::rename(&tmp, &path)
+            }
+        }
     }
 
     pub fn to_json(&self) -> Json {

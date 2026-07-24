@@ -763,6 +763,19 @@ function promptIsDirty(){
   return ta.value !== p.content || (ti && ti.value !== p.title);
 }
 
+/* any unsaved edit in the prompt OR recipe editor - background refreshes
+   (focus, library watcher) must not re-render over the user's typing */
+function anyEditorDirty(){
+  if(promptIsDirty()) return true;
+  const r = rById(selRecipeId), rn = $("#rName");
+  if(!r || !rn) return false;
+  if(rn.value !== r.name) return true;
+  return [...document.querySelectorAll("#vtRows input")].some(inp=>{
+    const k = inp.closest(".vt-row")?.querySelector(".nm")?.dataset.k;
+    return k !== undefined && inp.value !== (r.values[k] ?? "");
+  });
+}
+
 /* Turns a chip into an inline text field. Dragging must be switched off while
    editing, otherwise the draggable ancestor swallows clicks inside the input. */
 function chipEdit(chip, initial, onCommit, onCancel){
@@ -1219,8 +1232,20 @@ function render(){
   if(WIN==="sidebar") renderSidebar(); else renderMain();
 }
 (async function boot(){
-  await refresh();
-  onEvent("library-changed", async ()=>{ await refresh(); });
+  // A failed first load (file briefly locked by AV/indexer, watcher write
+  // in flight...) used to leave the app blank until something on disk
+  // changed. Retry a few times, and re-load whenever the window is shown
+  // again - the sidebar is hidden/shown all the time, so this self-heals.
+  let ok = false;
+  for(let i = 0; i < 5 && !ok; i++){
+    try { await refresh(); ok = true; }
+    catch(_) { await new Promise(r=>setTimeout(r, 400 + i*400)); }
+  }
+  onEvent("library-changed", async ()=>{ await refresh(anyEditorDirty()); });
+  document.addEventListener("visibilitychange", ()=>{
+    if(!document.hidden) refresh(anyEditorDirty()).catch(()=>{});
+  });
+  window.addEventListener("focus", ()=>{ refresh(anyEditorDirty()).catch(()=>{}); });
 })();
 </script>
 </body>
