@@ -6,6 +6,11 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+# the release step creates/updates a GitHub Release on tag pushes, which
+# needs write access (the default GITHUB_TOKEN is read-only)
+permissions:
+  contents: write
+
 jobs:
   test-core:
     name: Test core crates (Linux, offline-friendly)
