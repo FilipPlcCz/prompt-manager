@@ -172,16 +172,37 @@ fn main() {
                     .ok();
             }
 
-            // show sidebar on first launch + the launcher widget (if enabled)
+            // show sidebar on first launch; widget_sync inside keeps the
+            // launcher pill hidden while the sidebar is on screen
             let _ = windows::show_sidebar(&app.handle().clone());
-            windows::show_widget_if_enabled(&app.handle().clone());
             Ok(())
         })
         .on_window_event(|window, event| {
-            // closing a window hides it; the app lives in the tray
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
+            match event {
+                // closing a window hides it; the app lives in the tray
+                tauri::WindowEvent::CloseRequested { api, .. } => {
+                    api.prevent_close();
+                    let _ = window.hide();
+                    if window.label() == "sidebar" {
+                        windows::widget_sync(&window.app_handle().clone());
+                    }
+                }
+                // remember where the user dragged the launcher pill
+                tauri::WindowEvent::Moved(p) => {
+                    if window.label() == "widget" && window.is_visible().unwrap_or(false) {
+                        let scale = window.scale_factor().unwrap_or(1.0);
+                        let l: tauri::LogicalPosition<f64> = p.to_logical(scale);
+                        let state = window.app_handle().state::<AppState>();
+                        if let Ok(mut s) = state.settings.lock() {
+                            if s.widget_x != Some(l.x) || s.widget_y != Some(l.y) {
+                                s.widget_x = Some(l.x);
+                                s.widget_y = Some(l.y);
+                                let _ = s.save();
+                            }
+                        }
+                    }
+                }
+                _ => {}
             }
         })
         .invoke_handler(tauri::generate_handler![

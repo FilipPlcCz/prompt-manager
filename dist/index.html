@@ -59,7 +59,7 @@
   .sb-item .row:hover{background:var(--panel2)}
   /* the title is what gives way when space runs short - the recipe badge
      must stay readable in full (that is the whole point of the redesign) */
-  .sb-item .title{flex:1 1 auto;min-width:0;font-size:.76rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .sb-item .title{flex:1 1 auto;min-width:0;font-size:.84rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .copy-btn{border:1px solid var(--border);background:var(--panel2);color:var(--muted);
     width:23px;height:23px;border-radius:6px;display:grid;place-items:center;cursor:pointer;flex:none}
   .copy-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-soft)}
@@ -92,13 +92,12 @@
 
   /* ============ WIDGET window (floating launcher pill) ============ */
   body.w-widget{background:transparent;overflow:hidden}
-  #widget{width:38px;height:38px;margin:4px;border-radius:12px;
+  #widget{width:52px;height:22px;margin:4px;border-radius:8px;
     background:linear-gradient(135deg,var(--accent),var(--accent2));
-    display:grid;place-items:center;font-weight:700;font-size:13px;color:#fff;
-    cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.45);
+    cursor:grab;box-shadow:0 4px 14px rgba(0,0,0,.45);
     transition:transform .12s,filter .12s;user-select:none}
-  #widget:hover{transform:scale(1.08);filter:brightness(1.15)}
-  #widget:active{transform:scale(.97)}
+  #widget:hover{transform:scale(1.06);filter:brightness(1.15)}
+  #widget:active{cursor:grabbing;transform:scale(.97)}
 
   /* ============ MAIN window ============ */
   #main{display:flex;flex-direction:column;height:100%}
@@ -780,8 +779,28 @@ function renderSbList(){
    ===================================================================== */
 function renderWidget(){
   document.body.className = "w-widget";
-  $("#app").innerHTML = `<div id="widget" title="Prompt Manager">PM</div>`;
-  $("#widget").onclick = () => call("toggle_sidebar").catch(()=>{});
+  $("#app").innerHTML = `<div id="widget" title="Prompt Manager"></div>`;
+  // click = show the sidebar; press-and-move = drag the pill anywhere.
+  // The OS drag (startDragging) swallows mouseup, so a real click is
+  // "mouse released before moving more than a few px".
+  const el = $("#widget");
+  let down = null;
+  el.addEventListener("mousedown", e=>{
+    if(e.button !== 0) return;
+    down = { x: e.screenX, y: e.screenY };
+  });
+  el.addEventListener("mousemove", e=>{
+    if(!down) return;
+    if(Math.abs(e.screenX - down.x) + Math.abs(e.screenY - down.y) > 4){
+      down = null;
+      if(IS_TAURI) window.__TAURI__.window.getCurrentWindow().startDragging();
+    }
+  });
+  el.addEventListener("mouseup", ()=>{
+    if(!down) return;
+    down = null;
+    call("toggle_sidebar").catch(()=>{});
+  });
 }
 
 /* =====================================================================

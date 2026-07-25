@@ -97,7 +97,7 @@ Tools: `list_prompts`, `get_prompt`, `render_prompt(id|nazev, recipe?)`, `create
 - Tray ikona: levý klik = zobrazit/skrýt sidebar, pravý klik = menu.
 - Globální zkratka `Ctrl+Alt+P` (změna v Nastavení, projeví se po restartu).
 - Sidebar: ⋮⋮ úchyt = přetažení pořadí; select pod názvem = recept pro kopírování; ikona ↗ = plné okno; ikona ⊙ = zobrazit/skrýt plovoucí tlačítko.
-- Plovoucí tlačítko „PM“ (vlevo nahoře, nad všemi okny): klik = zobrazit/skrýt sidebar.
+- Plovoucí tlačítko (nad všemi okny): klik = zobrazit sidebar; tažením myší ho přemístíte kamkoliv (pozice se pamatuje). Při zobrazeném sidebaru se tlačítko samo schová.
 - Zavření okna aplikaci neukončí (běží v tray); Ukončit je v tray menu.
 
 ## Známá omezení v1 (kandidáti na v1.1)

@@ -25,6 +25,9 @@ pub struct Settings {
     pub language: String,
     /// the small always-on-top launcher pill at the left screen edge
     pub widget_enabled: bool,
+    /// user-dragged position of the pill (logical px); None = default spot
+    pub widget_x: Option<f64>,
+    pub widget_y: Option<f64>,
     pub settings_version: u32,
 }
 
@@ -57,6 +60,8 @@ impl Default for Settings {
             always_on_top: true,
             language: "en".into(),
             widget_enabled: true,
+            widget_x: None,
+            widget_y: None,
             settings_version: SETTINGS_VERSION,
         }
     }
@@ -106,6 +111,12 @@ impl Settings {
                 if let Some(b) = v.get("widget_enabled").and_then(|x| x.as_bool()) {
                     s.widget_enabled = b;
                 }
+                if let Some(x) = v.get("widget_x").and_then(|x| x.as_f64()) {
+                    s.widget_x = Some(x);
+                }
+                if let Some(y) = v.get("widget_y").and_then(|x| x.as_f64()) {
+                    s.widget_y = Some(y);
+                }
                 let ver = v
                     .get("settings_version")
                     .and_then(|x| x.as_f64())
@@ -148,6 +159,12 @@ impl Settings {
         o.insert("always_on_top".to_string(), Json::Bool(self.always_on_top));
         o.insert("language".to_string(), Json::str(&self.language));
         o.insert("widget_enabled".to_string(), Json::Bool(self.widget_enabled));
+        if let Some(x) = self.widget_x {
+            o.insert("widget_x".to_string(), Json::Num(x));
+        }
+        if let Some(y) = self.widget_y {
+            o.insert("widget_y".to_string(), Json::Num(y));
+        }
         o.insert(
             "settings_version".to_string(),
             Json::Num(self.settings_version as f64),

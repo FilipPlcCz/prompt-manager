@@ -61,6 +61,7 @@ pub fn toggle_sidebar(app: &AppHandle) -> Result<(), String> {
         position_sidebar(app)?;
         win.set_focus().map_err(|e| e.to_string())?;
     }
+    widget_sync(app);
     Ok(())
 }
 
@@ -71,15 +72,22 @@ pub fn show_sidebar(app: &AppHandle) -> Result<(), String> {
     win.show().map_err(|e| e.to_string())?;
     position_sidebar(app)?;
     win.set_focus().map_err(|e| e.to_string())?;
+    widget_sync(app);
     Ok(())
 }
 
-/// Parks the launcher widget at the left screen edge, a bit below the top
-/// (Wispr-Flow style: always visible, above everything, one click away).
+/// Puts the launcher widget where the user last dragged it, or at the
+/// default spot (left edge, a bit below the top). Clamped to the work area
+/// so a remembered position from another monitor cannot end up off-screen.
 pub fn position_widget(app: &AppHandle) -> Result<(), String> {
     let win = app
         .get_webview_window("widget")
         .ok_or("widget window missing")?;
+    let (wx, wy) = {
+        let state = app.state::<crate::commands::AppState>();
+        let s = state.settings.lock().map_err(|e| e.to_string())?;
+        (s.widget_x, s.widget_y)
+    };
     let monitor = win
         .current_monitor()
         .map_err(|e| e.to_string())?
@@ -88,32 +96,27 @@ pub fn position_widget(app: &AppHandle) -> Result<(), String> {
     let scale = monitor.scale_factor();
     let area = monitor.work_area();
     let pos_l: LogicalPosition<f64> = area.position.to_logical(scale);
-    win.set_position(LogicalPosition::new(pos_l.x + 6.0, pos_l.y + 110.0))
+    let size_l: LogicalSize<f64> = area.size.to_logical(scale);
+    let (x, y) = match (wx, wy) {
+        (Some(x), Some(y)) => (
+            x.clamp(pos_l.x, pos_l.x + size_l.width - 40.0),
+            y.clamp(pos_l.y, pos_l.y + size_l.height - 30.0),
+        ),
+        _ => (pos_l.x + 6.0, pos_l.y + 110.0),
+    };
+    win.set_position(LogicalPosition::new(x, y))
         .map_err(|e| e.to_string())?;
     win.set_always_on_top(true).map_err(|e| e.to_string())?;
     Ok(())
 }
 
-/// Shows/hides the launcher widget and persists the choice.
-pub fn set_widget_visible(app: &AppHandle, on: bool) -> Result<(), String> {
-    {
-        let state = app.state::<crate::commands::AppState>();
-        let mut s = state.settings.lock().map_err(|e| e.to_string())?;
-        s.widget_enabled = on;
-        s.save().map_err(|e| e.to_string())?;
-    }
-    if let Some(win) = app.get_webview_window("widget") {
-        if on {
-            win.show().map_err(|e| e.to_string())?;
-            position_widget(app)?;
-        } else {
-            win.hide().map_err(|e| e.to_string())?;
-        }
-    }
-    Ok(())
-}
-
-pub fn show_widget_if_enabled(app: &AppHandle) {
+/// The launcher pill stands in for the hidden sidebar: it is visible only
+/// while the sidebar is hidden AND the user has not switched it off.
+pub fn widget_sync(app: &AppHandle) {
+    let sidebar_visible = app
+        .get_webview_window("sidebar")
+        .and_then(|w| w.is_visible().ok())
+        .unwrap_or(false);
     let enabled = {
         let state = app.state::<crate::commands::AppState>();
         state
@@ -122,12 +125,26 @@ pub fn show_widget_if_enabled(app: &AppHandle) {
             .map(|s| s.widget_enabled)
             .unwrap_or(true)
     };
-    if enabled {
-        if let Some(win) = app.get_webview_window("widget") {
+    if let Some(win) = app.get_webview_window("widget") {
+        if enabled && !sidebar_visible {
             let _ = win.show();
             let _ = position_widget(app);
+        } else {
+            let _ = win.hide();
         }
     }
+}
+
+/// Persists the on/off choice, then lets widget_sync decide what shows.
+pub fn set_widget_visible(app: &AppHandle, on: bool) -> Result<(), String> {
+    {
+        let state = app.state::<crate::commands::AppState>();
+        let mut s = state.settings.lock().map_err(|e| e.to_string())?;
+        s.widget_enabled = on;
+        s.save().map_err(|e| e.to_string())?;
+    }
+    widget_sync(app);
+    Ok(())
 }
 
 pub fn show_main(app: &AppHandle) -> Result<(), String> {

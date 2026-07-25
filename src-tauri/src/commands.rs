@@ -447,6 +447,8 @@ pub fn hide_sidebar(app: AppHandle) -> Result<(), String> {
     if let Some(w) = app.get_webview_window("sidebar") {
         w.hide().map_err(|e| e.to_string())?;
     }
+    // the launcher pill takes the sidebar's place once it is hidden
+    crate::windows::widget_sync(&app);
     Ok(())
 }
 
