@@ -1,6 +1,6 @@
 # Prompt Manager
 
-Windows aplikace pro správu textových promptů: kompaktní **sidebar** u levého okraje obrazovky (~15 % šířky, always-on-top) pro rychlé kopírování, **plné okno** pro správu promptů a receptů, **lokální REST API** a **MCP server** pro přístup LLM nástrojů (Claude Code, Claude Desktop…).
+Windows aplikace pro správu textových promptů: kompaktní **sidebar** u levého okraje obrazovky (~15 % šířky, always-on-top) pro rychlé kopírování, **plné okno** pro správu promptů a receptů, **plovoucí tlačítko** (malý always-on-top rámeček vlevo nahoře, klik zobrazí/skryje sidebar), **lokální REST API** a **MCP server** pro přístup LLM nástrojů (Claude Code, Claude Desktop…). UI je anglicky (výchozí), česky a německy — přepíná se v Nastavení.
 
 Postaveno na **Tauri v2** (Rust + WebView2). Jádro, REST API i MCP server jsou **bez externích závislostí** (čistý Rust std) a plně pokryté testy; frontend je čisté HTML/JS bez build kroku.
 
@@ -96,7 +96,8 @@ Tools: `list_prompts`, `get_prompt`, `render_prompt(id|nazev, recipe?)`, `create
 
 - Tray ikona: levý klik = zobrazit/skrýt sidebar, pravý klik = menu.
 - Globální zkratka `Ctrl+Alt+P` (změna v Nastavení, projeví se po restartu).
-- Sidebar: ⋮⋮ úchyt = přetažení pořadí; select pod názvem = recept pro kopírování; ikona ↗ = plné okno.
+- Sidebar: ⋮⋮ úchyt = přetažení pořadí; select pod názvem = recept pro kopírování; ikona ↗ = plné okno; ikona ⊙ = zobrazit/skrýt plovoucí tlačítko.
+- Plovoucí tlačítko „PM“ (vlevo nahoře, nad všemi okny): klik = zobrazit/skrýt sidebar.
 - Zavření okna aplikaci neukončí (běží v tray); Ukončit je v tray menu.
 
 ## Známá omezení v1 (kandidáti na v1.1)
@@ -104,7 +105,6 @@ Tools: `list_prompts`, `get_prompt`, `render_prompt(id|nazev, recipe?)`, `create
 - Změna API portu/zkratky/složky knihovny se projeví až po restartu aplikace.
 - Editor obsahu je prostý textarea (placeholdery se zvýrazňují pod ním a v náhledu, ne přímo v textu).
 - Export/import výběru promptů zatím jen kopírováním složky `library/`.
-- UI jen česky (texty jsou centralizované v objektu `T`, EN lze snadno doplnit).
 - Světlé téma zatím není.
 - Windows: první spuštění může vyžadovat instalaci WebView2 runtime (installer to řeší).
 
