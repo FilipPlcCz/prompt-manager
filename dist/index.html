@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="cs">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -16,10 +16,12 @@
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html,body,#app{height:100%}
+  /* rem base 16px -> 17px: everything sized in rem grows ~6 % */
+  html{font-size:17px}
   body{
     background:var(--bg);color:var(--text);
     font-family:"Segoe UI",system-ui,-apple-system,sans-serif;
-    font-size:14px;overflow:hidden;user-select:none;
+    font-size:15px;overflow:hidden;user-select:none;
   }
   input,textarea,select,button{font-family:inherit;color:inherit}
   textarea,input{user-select:text}
@@ -73,7 +75,7 @@
     white-space:nowrap;text-overflow:ellipsis}
   .rsel:hover,.rsel:focus{background-color:var(--accent);color:#0b0d12}
   .rsel option{background:var(--panel2);color:var(--text);font-weight:400}
-  .icon-btn.pin.on{color:var(--accent);background:var(--accent-soft)}
+  .icon-btn.on{color:var(--accent);background:var(--accent-soft)}
   .sb-foot{border-top:1px solid var(--border);padding:5px 8px;font-size:.66rem;color:var(--faint);
     display:flex;justify-content:space-between;align-items:center;gap:6px;white-space:nowrap}
   .sb-hint{font-size:.6rem;color:var(--faint);opacity:.8;overflow:hidden;text-overflow:ellipsis}
@@ -87,6 +89,16 @@
     color:var(--accent);margin-bottom:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .kbd{background:var(--panel3);border:1px solid var(--border2);border-bottom-width:2px;border-radius:4px;
     padding:0 4px;font-size:.62rem;color:var(--muted);font-family:Consolas,monospace}
+
+  /* ============ WIDGET window (floating launcher pill) ============ */
+  body.w-widget{background:transparent;overflow:hidden}
+  #widget{width:38px;height:38px;margin:4px;border-radius:12px;
+    background:linear-gradient(135deg,var(--accent),var(--accent2));
+    display:grid;place-items:center;font-weight:700;font-size:13px;color:#fff;
+    cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,.45);
+    transition:transform .12s,filter .12s;user-select:none}
+  #widget:hover{transform:scale(1.08);filter:brightness(1.15)}
+  #widget:active{transform:scale(.97)}
 
   /* ============ MAIN window ============ */
   #main{display:flex;flex-direction:column;height:100%}
@@ -225,6 +237,9 @@
   .modal .field{margin-bottom:12px}
   .modal input[type=text],.modal input[type=number]{width:100%;background:var(--panel2);border:1px solid var(--border);
     border-radius:8px;padding:8px 11px;font-size:.82rem;outline:none}
+  .modal select{width:100%;background:var(--panel2);border:1px solid var(--border);
+    border-radius:8px;padding:8px 11px;font-size:.82rem;outline:none;cursor:pointer}
+  .modal select:focus{border-color:var(--accent)}
   .modal .roww{display:flex;gap:8px;align-items:center}
   .modal .roww input{flex:1}
   .modal pre{background:#101319;border:1px solid var(--border);border-radius:8px;padding:10px;
@@ -267,9 +282,9 @@ const onEvent = IS_TAURI
 /* ---------- tiny mock backend for browser preview ---------- */
 const mock = {
   prompts: [], recipes: [], variables: [], nextId: 1,
-  settings: { library_dir: "(náhled v prohlížeči)", api_enabled: true, api_port: 8737,
+  settings: { library_dir: "(browser preview)", api_enabled: true, api_port: 8737,
               api_key: "demo-api-key", shortcut: "ctrl+alt+p", sidebar_ratio: 0.15,
-              always_on_top: true },
+              always_on_top: true, language: "en", widget_enabled: true },
 };
 /* every recipe holds every variable (empty value = not filled in) */
 function mockNormalize(){
@@ -374,17 +389,62 @@ async function mockInvoke(cmd, a){
     case "get_settings": return JSON.stringify(mock.settings);
     case "save_settings": { const v=JSON.parse(a.settingsJson); Object.assign(mock.settings,v); return JSON.stringify(mock.settings); }
     case "mcp_config_snippet": return JSON.stringify({mcpServers:{"prompt-manager":{command:"prompt-manager-mcp.exe",args:["--library",mock.settings.library_dir]}}},null,2);
+    case "set_widget_visible": { mock.settings.widget_enabled = !!a.on; return null; }
     case "open_library_folder": case "toggle_sidebar": case "open_main": case "hide_sidebar": case "hide_main": return null;
     default: throw "unknown command "+cmd;
   }
 }
 
-/* ---------- i18n (cs) ---------- */
-const T = {
+/* ---------- i18n (en default, cs, de) ---------- */
+const LOCALES = {
+en: {
+  search:"Search…", searchRecipe:"Search recipes…", prompts:"Prompts", recipes:"Recipes",
+  settings:"Settings", newPrompt:"+ New prompt", newRecipe:"+ New recipe",
+  name:"Prompt name", content:"Prompt content", assigned:"Assigned recipes",
+  save:"Save", copy:"Copy", del:"Delete",
+  duplicate:"Duplicate", raw:"— unfilled (raw)", copied:"Copied to clipboard",
+  copiedWith:"Copied — recipe “{0}”", copiedRaw:"Copied — raw text",
+  copiedChain:"{0} prompts chained in the clipboard (Shift+click adds more)",
+  sbShiftHint:"Shift+click = chain copy",
+  sbShiftHintLong:"Shift+click on the copy button chains prompts in the clipboard one after another",
+  saved:"Saved ✓", recipeSaved:"Recipe saved ✓", orderSaved:"Order saved",
+  variables:"Variables", varAuto:"click inserts · ✕ delete · double-click rename · + add",
+  pinTitle:"Always on top (above other windows)", pinOn:"Window stays on top 📌",
+  pinOff:"Window behaves normally", addVarTitle:"Add variable",
+  varAddedG:"Variable {0} added", varRenamed:"Renamed to {0}", varDeleted:"Variable {0} deleted",
+  confirmDelVar:"Delete variable “{0}”? It disappears from all recipes. Prompts ({1}) keep {{{0}}} — it will show up as unfilled.",
+  confirmDelVar0:"Delete variable “{0}”? It disappears from all recipes.",
+  dirtyWarn:"The prompt has unsaved changes. Save it first — renaming rewrites prompt texts.",
+  filledIn:"{0}/{1}",
+  recipeName:"Recipe name", recipeVars:"Recipe variables", varName:"Variable", varValue:"Value",
+  saveRecipe:"Save recipe",
+  emptyVars:"No variables yet — add them with the + button in the top bar.",
+  confirmDelPrompt:"Really delete prompt “{0}”?",
+  confirmDelRecipe:"Recipe “{0}” is used by prompts: {1}. Really delete? References will be removed.",
+  confirmDelRecipe0:"Really delete recipe “{0}”?",
+  edHint:"Click a variable chip in the top bar (inserted at the caret), or drag it here.",
+  noEditor:"Open a prompt on the left first.",
+  selectPrompt:"Select a prompt on the left, or create a new one.",
+  selectRecipe:"Select a recipe on the left, or create a new one.",
+  usedIn:"filled {0} · used in {1} prompts", recCount:"{0} recipes",
+  newPromptName:"New prompt", newRecipeName:"New recipe",
+  inserted:"Inserted placeholder {{{0}}}",
+  msFoot:"Checked recipes are offered in the sidebar.",
+  copyApiKey:"Copy", regen:"Generate new", apiUrl:"API address", apiKey:"API key",
+  library:"Library folder", openFolder:"Open folder", mcpTitle:"MCP configuration (Claude Code / Claude Desktop)",
+  mcpCopy:"Copy configuration", close:"Close", apiEnabled:"Enable local REST API (change requires app restart)",
+  shortcut:"Global shortcut (restart)", err:"Error: {0}",
+  openManager:"Open manager", hideWin:"Hide (keeps running in the tray)",
+  dragOrder:"Drag to reorder", collapseWin:"Collapse to sidebar", removeTag:"Remove",
+  copySuffix:" (copy)", language:"Language (tray menu changes after restart)",
+  widgetTitle:"Show/hide the floating button", widgetOn:"Floating button shown",
+  widgetOff:"Floating button hidden", ofCount:"{0} of {1}",
+},
+cs: {
   search:"Hledat…", searchRecipe:"Hledat recept…", prompts:"Prompty", recipes:"Recepty",
   settings:"Nastavení", newPrompt:"+ Nový prompt", newRecipe:"+ Nový recept",
   name:"Název promptu", content:"Obsah promptu", assigned:"Přiřazené recepty",
-  preview:"Živý náhled — recept:", save:"Uložit", copy:"Kopírovat", del:"Smazat",
+  save:"Uložit", copy:"Kopírovat", del:"Smazat",
   duplicate:"Duplikovat", raw:"— bez vyplnění (raw)", copied:"Zkopírováno do schránky",
   copiedWith:"Zkopírováno — recept „{0}“", copiedRaw:"Zkopírováno — raw text",
   copiedChain:"Ve schránce {0} promptů za sebou (Shift+klik přidává další)",
@@ -392,7 +452,6 @@ const T = {
   sbShiftHintLong:"Shift+klik na tlačítko kopírovat řadí prompty do schránky za sebe",
   saved:"Uloženo ✓", recipeSaved:"Recept uložen ✓", orderSaved:"Pořadí uloženo",
   variables:"Proměnné", varAuto:"klik vloží · ✕ smazat · dvojklik přejmenovat · + přidat",
-  varDrop:"přetažením vložíte proměnnou do receptu",
   pinTitle:"Vždy navrchu (nad ostatními okny)", pinOn:"Okno je nad ostatními 📌",
   pinOff:"Okno se chová normálně", addVarTitle:"Přidat proměnnou",
   varAddedG:"Proměnná {0} přidána", varRenamed:"Přejmenováno na {0}", varDeleted:"Proměnná {0} smazána",
@@ -401,25 +460,78 @@ const T = {
   dirtyWarn:"Prompt má neuložené změny. Nejdřív ho uložte — přejmenování přepíše texty promptů.",
   filledIn:"{0}/{1}",
   recipeName:"Název receptu", recipeVars:"Proměnné receptu", varName:"Proměnná", varValue:"Hodnota",
-  addVar:"+ Přidat proměnnou", saveRecipe:"Uložit recept", promptsCount:"{0} promptů",
+  saveRecipe:"Uložit recept",
   emptyVars:"Zatím nejsou žádné proměnné — přidejte je tlačítkem + v horní liště.",
   confirmDelPrompt:"Opravdu smazat prompt „{0}“?",
   confirmDelRecipe:"Recept „{0}“ používají prompty: {1}. Opravdu smazat? Reference budou odebrány.",
   confirmDelRecipe0:"Opravdu smazat recept „{0}“?",
-  missingWarn:"⚠ {0} placeholder(ů) nemá v tomto receptu hodnotu — zůstanou nevyplněné.",
   edHint:"Klikněte na chip proměnné v horní liště (vloží se na pozici kurzoru), nebo ho sem přetáhněte.",
   noEditor:"Nejdřív otevřete prompt vlevo.",
   selectPrompt:"Vyberte prompt vlevo, nebo vytvořte nový.",
   selectRecipe:"Vyberte recept vlevo, nebo vytvořte nový.",
   usedIn:"vyplněno {0} · použit v {1} promptech", recCount:"{0} receptů",
   newPromptName:"Nový prompt", newRecipeName:"Nový recept",
-  inserted:"Vložen placeholder {{{0}}}", varAdded:"Proměnná {0} přidána do receptu",
+  inserted:"Vložen placeholder {{{0}}}",
   msFoot:"Zaškrtnuté recepty budou na výběr v sidebaru.",
   copyApiKey:"Zkopírovat", regen:"Vygenerovat nový", apiUrl:"Adresa API", apiKey:"API klíč",
   library:"Složka knihovny", openFolder:"Otevřít složku", mcpTitle:"MCP konfigurace (Claude Code / Claude Desktop)",
   mcpCopy:"Zkopírovat konfiguraci", close:"Zavřít", apiEnabled:"Povolit lokální REST API (změna vyžaduje restart aplikace)",
   shortcut:"Globální zkratka (restart)", err:"Chyba: {0}",
+  openManager:"Otevřít správu", hideWin:"Skrýt (běží dál v liště)",
+  dragOrder:"Přetažením změníte pořadí", collapseWin:"Zmenšit do sidebaru", removeTag:"Odebrat",
+  copySuffix:" (kopie)", language:"Jazyk (menu v liště se změní po restartu)",
+  widgetTitle:"Zobrazit/skrýt plovoucí tlačítko", widgetOn:"Plovoucí tlačítko zapnuto",
+  widgetOff:"Plovoucí tlačítko skryto", ofCount:"{0} z {1}",
+},
+de: {
+  search:"Suchen…", searchRecipe:"Rezepte suchen…", prompts:"Prompts", recipes:"Rezepte",
+  settings:"Einstellungen", newPrompt:"+ Neuer Prompt", newRecipe:"+ Neues Rezept",
+  name:"Prompt-Name", content:"Prompt-Inhalt", assigned:"Zugewiesene Rezepte",
+  save:"Speichern", copy:"Kopieren", del:"Löschen",
+  duplicate:"Duplizieren", raw:"— unausgefüllt (raw)", copied:"In die Zwischenablage kopiert",
+  copiedWith:"Kopiert — Rezept „{0}“", copiedRaw:"Kopiert — Rohtext",
+  copiedChain:"{0} Prompts hintereinander in der Zwischenablage (Shift+Klick fügt weitere an)",
+  sbShiftHint:"Shift+Klick = Kettenkopie",
+  sbShiftHintLong:"Shift+Klick auf die Kopier-Schaltfläche reiht Prompts in der Zwischenablage aneinander",
+  saved:"Gespeichert ✓", recipeSaved:"Rezept gespeichert ✓", orderSaved:"Reihenfolge gespeichert",
+  variables:"Variablen", varAuto:"Klick fügt ein · ✕ löschen · Doppelklick umbenennen · + hinzufügen",
+  pinTitle:"Immer im Vordergrund (über anderen Fenstern)", pinOn:"Fenster bleibt im Vordergrund 📌",
+  pinOff:"Fenster verhält sich normal", addVarTitle:"Variable hinzufügen",
+  varAddedG:"Variable {0} hinzugefügt", varRenamed:"Umbenannt in {0}", varDeleted:"Variable {0} gelöscht",
+  confirmDelVar:"Variable „{0}“ löschen? Sie verschwindet aus allen Rezepten. Prompts ({1}) behalten {{{0}}} — gilt dann als unausgefüllt.",
+  confirmDelVar0:"Variable „{0}“ löschen? Sie verschwindet aus allen Rezepten.",
+  dirtyWarn:"Der Prompt hat ungespeicherte Änderungen. Zuerst speichern — das Umbenennen überschreibt Prompt-Texte.",
+  filledIn:"{0}/{1}",
+  recipeName:"Rezeptname", recipeVars:"Rezept-Variablen", varName:"Variable", varValue:"Wert",
+  saveRecipe:"Rezept speichern",
+  emptyVars:"Noch keine Variablen — mit der +-Schaltfläche in der oberen Leiste hinzufügen.",
+  confirmDelPrompt:"Prompt „{0}“ wirklich löschen?",
+  confirmDelRecipe:"Rezept „{0}“ wird von Prompts verwendet: {1}. Wirklich löschen? Verweise werden entfernt.",
+  confirmDelRecipe0:"Rezept „{0}“ wirklich löschen?",
+  edHint:"Auf einen Variablen-Chip in der oberen Leiste klicken (wird am Cursor eingefügt) oder hierher ziehen.",
+  noEditor:"Zuerst links einen Prompt öffnen.",
+  selectPrompt:"Links einen Prompt auswählen oder einen neuen erstellen.",
+  selectRecipe:"Links ein Rezept auswählen oder ein neues erstellen.",
+  usedIn:"ausgefüllt {0} · in {1} Prompts verwendet", recCount:"{0} Rezepte",
+  newPromptName:"Neuer Prompt", newRecipeName:"Neues Rezept",
+  inserted:"Platzhalter {{{0}}} eingefügt",
+  msFoot:"Angehakte Rezepte stehen in der Seitenleiste zur Auswahl.",
+  copyApiKey:"Kopieren", regen:"Neu generieren", apiUrl:"API-Adresse", apiKey:"API-Schlüssel",
+  library:"Bibliotheksordner", openFolder:"Ordner öffnen", mcpTitle:"MCP-Konfiguration (Claude Code / Claude Desktop)",
+  mcpCopy:"Konfiguration kopieren", close:"Schließen", apiEnabled:"Lokale REST-API aktivieren (Änderung erfordert Neustart)",
+  shortcut:"Globales Tastenkürzel (Neustart)", err:"Fehler: {0}",
+  openManager:"Verwaltung öffnen", hideWin:"Ausblenden (läuft in der Leiste weiter)",
+  dragOrder:"Zum Umsortieren ziehen", collapseWin:"In die Seitenleiste verkleinern", removeTag:"Entfernen",
+  copySuffix:" (Kopie)", language:"Sprache (Menü in der Leiste nach Neustart)",
+  widgetTitle:"Schwebende Schaltfläche ein/aus", widgetOn:"Schwebende Schaltfläche sichtbar",
+  widgetOff:"Schwebende Schaltfläche ausgeblendet", ofCount:"{0} von {1}",
+},
 };
+let T = LOCALES.en;
+function setLang(l){
+  T = LOCALES[l] || LOCALES.en;
+  document.documentElement.lang = LOCALES[l] ? l : "en";
+}
 const fmt = (s, ...a) => s.replace(/\{(\d)\}/g, (_,i)=>a[+i]);
 
 /* ---------- helpers ---------- */
@@ -502,6 +614,7 @@ const SVG = {
   collapse:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>',
   pin:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="17" x2="12" y2="22"/><path d="M9 3h6l-1 6 3 3v2H7v-2l3-3z"/></svg>',
   plus:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>',
+  widget:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="3.2"/></svg>',
   gear:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
 };
 
@@ -519,6 +632,7 @@ const pById = id => S.prompts.find(p=>p.id===id);
 
 async function refresh(keepUnsaved){
   S = await call("state_snapshot");
+  setLang(S.settings.language);
   if(!keepUnsaved) render();
 }
 
@@ -533,8 +647,9 @@ function renderSidebar(){
       <div class="logo" data-tauri-drag-region>PM</div>
       <div class="name" data-tauri-drag-region>Prompt Manager</div>
       <button class="icon-btn pin${S.settings.always_on_top?" on":""}" id="btnPin" title="${T.pinTitle}">${SVG.pin}</button>
-      <button class="icon-btn" id="btnExpand" title="Otevřít správu">${SVG.expand}</button>
-      <button class="icon-btn" id="btnHide" title="Skrýt (běží dál v liště)">${SVG.close}</button>
+      <button class="icon-btn${S.settings.widget_enabled?" on":""}" id="btnWidget" title="${T.widgetTitle}">${SVG.widget}</button>
+      <button class="icon-btn" id="btnExpand" title="${T.openManager}">${SVG.expand}</button>
+      <button class="icon-btn" id="btnHide" title="${T.hideWin}">${SVG.close}</button>
     </div>
     <div class="sb-search"><input id="sbSearch" type="text" placeholder="${T.search}" value="${esc(sbFilter)}"></div>
     <div id="sbList"></div>
@@ -550,6 +665,13 @@ function renderSidebar(){
     S.settings.always_on_top = on;
     $("#btnPin").classList.toggle("on", on);
     toast(on ? T.pinOn : T.pinOff);
+  };
+  $("#btnWidget").onclick = async () => {
+    const on = !S.settings.widget_enabled;
+    await call("set_widget_visible", { on });
+    S.settings.widget_enabled = on;
+    $("#btnWidget").classList.toggle("on", on);
+    toast(on ? T.widgetOn : T.widgetOff);
   };
   $("#btnExpand").onclick = async () => { await call("open_main"); };
   $("#btnHide").onclick = async () => { await call("hide_sidebar"); };
@@ -608,8 +730,8 @@ function renderSbList(){
     }
     return `<div class="sb-item" data-idx="${i}" data-id="${esc(p.id)}">
       <div class="row">
-        <span class="grip" title="Přetažením změníte pořadí">⋮⋮</span>
-        <span class="title" title="${esc(p.title)}">${esc(p.title)}</span>
+        <span class="grip" title="${T.dragOrder}">⋮⋮</span>
+        <span class="title">${esc(p.title)}</span>
         ${rsel}
         <button class="copy-btn" data-copy="${esc(p.id)}" title="${T.copy}">${SVG.copy}</button>
       </div></div>`;
@@ -650,6 +772,16 @@ function renderSbList(){
     };
   });
   makeSortable(box, ".sb-item");
+}
+
+/* =====================================================================
+   WIDGET window - the tiny always-on-top launcher pill. One click shows
+   or hides the sidebar; the sidebar titlebar button hides the pill itself.
+   ===================================================================== */
+function renderWidget(){
+  document.body.className = "w-widget";
+  $("#app").innerHTML = `<div id="widget" title="Prompt Manager">PM</div>`;
+  $("#widget").onclick = () => call("toggle_sidebar").catch(()=>{});
 }
 
 /* =====================================================================
@@ -718,7 +850,7 @@ function renderMain(){
         <button id="navRecipes" class="${view==="recipes"?"on":""}">${T.recipes}</button>
       </nav>
       <button class="icon-btn" id="btnSettings" title="${T.settings}">${SVG.gear}</button>
-      <button class="icon-btn" id="btnCollapse" title="Zmenšit do sidebaru">${SVG.collapse}</button>
+      <button class="icon-btn" id="btnCollapse" title="${T.collapseWin}">${SVG.collapse}</button>
     </div>
     <div class="varbar">
       <span class="vb-label">${T.variables}</span>
@@ -1051,7 +1183,7 @@ function renderPromptDetail(box){
     $("#mselList").innerHTML = S.recipes.filter(r=>r.name.toLowerCase().includes(f)).map(r=>
       `<label><input type="checkbox" data-r="${esc(r.id)}" ${p.recipes.includes(r.id)?"checked":""}>
        ${esc(r.name)}<span class="vcnt">${Object.values(r.values).filter(v=>v).length}/${Object.keys(r.values).length}</span></label>`).join("");
-    $("#mselLabel").textContent = `${T.assigned} (${p.recipes.length} z ${S.recipes.length})`;
+    $("#mselLabel").textContent = `${T.assigned} (${fmt(T.ofCount, p.recipes.length, S.recipes.length)})`;
     $("#mselList").querySelectorAll("input[data-r]").forEach(cb=>{
       cb.onchange = ()=>{
         const id=cb.dataset.r;
@@ -1065,7 +1197,7 @@ function renderPromptDetail(box){
   const renderTags = ()=>{
     $("#rtags").innerHTML = p.recipes.map(id=>{
       const r=rById(id); if(!r) return "";
-      return `<span class="rtag">${esc(r.name)}<i data-un="${esc(id)}" title="Odebrat">✕</i></span>`;
+      return `<span class="rtag">${esc(r.name)}<i data-un="${esc(id)}" title="${T.removeTag}">✕</i></span>`;
     }).join("");
     $("#rtags").querySelectorAll("[data-un]").forEach(x=>{
       x.onclick = ()=>{
@@ -1167,7 +1299,7 @@ function renderRecipeDetail(box){
     await refresh(true); selRecipeId = saved.id; render(); toast(T.recipeSaved);
   };
   $("#btnDupR").onclick = async ()=>{
-    const d = await call("create_recipe", { name: r.name + " (kopie)" });
+    const d = await call("create_recipe", { name: r.name + T.copySuffix });
     const values = {}; rows.forEach(row=>{ if(row.k) values[row.k]=row.v; });
     await call("save_recipe", { recipeJson: JSON.stringify({ id:d.id, name:d.name, values }) });
     await refresh(true); selRecipeId = d.id; render();
@@ -1184,6 +1316,12 @@ async function openSettings(){
   div.innerHTML = `
   <div class="modal">
     <h2>${T.settings}</h2>
+    <div class="field"><label>${T.language}</label>
+      <select id="setLang">
+        <option value="en" ${s.language==="en"?"selected":""}>English</option>
+        <option value="cs" ${s.language==="cs"?"selected":""}>Čeština</option>
+        <option value="de" ${s.language==="de"?"selected":""}>Deutsch</option>
+      </select></div>
     <div class="field"><label>${T.library}</label>
       <div class="roww"><input type="text" id="setLib" value="${esc(s.library_dir)}">
       <button class="btn secondary" id="btnOpenLib">${T.openFolder}</button></div></div>
@@ -1222,6 +1360,7 @@ async function openSettings(){
       library_dir: $("#setLib").value,
       api_enabled: $("#setApiOn").checked,
       shortcut: $("#setShortcut").value,
+      language: $("#setLang").value,
     })});
     div.remove(); toast(T.saved); refresh();
   };
@@ -1232,6 +1371,8 @@ function render(){
   if(WIN==="sidebar") renderSidebar(); else renderMain();
 }
 (async function boot(){
+  // the launcher pill needs no data - render it and stop here
+  if(WIN === "widget"){ renderWidget(); return; }
   // A failed first load (file briefly locked by AV/indexer, watcher write
   // in flight...) used to leave the app blank until something on disk
   // changed. Retry a few times, and re-load whenever the window is shown

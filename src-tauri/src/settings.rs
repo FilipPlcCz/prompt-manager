@@ -21,6 +21,10 @@ pub struct Settings {
     pub sidebar_ratio: f64,
     /// whether the sidebar floats above other windows (the pin)
     pub always_on_top: bool,
+    /// UI language: "en" (default), "cs" or "de"
+    pub language: String,
+    /// the small always-on-top launcher pill at the left screen edge
+    pub widget_enabled: bool,
     pub settings_version: u32,
 }
 
@@ -51,6 +55,8 @@ impl Default for Settings {
             shortcut: "ctrl+alt+p".into(),
             sidebar_ratio: 0.15,
             always_on_top: true,
+            language: "en".into(),
+            widget_enabled: true,
             settings_version: SETTINGS_VERSION,
         }
     }
@@ -92,6 +98,14 @@ impl Settings {
                 if let Some(b) = v.get("always_on_top").and_then(|x| x.as_bool()) {
                     s.always_on_top = b;
                 }
+                if let Some(l) = v.get_str("language") {
+                    if matches!(l, "en" | "cs" | "de") {
+                        s.language = l.to_string();
+                    }
+                }
+                if let Some(b) = v.get("widget_enabled").and_then(|x| x.as_bool()) {
+                    s.widget_enabled = b;
+                }
                 let ver = v
                     .get("settings_version")
                     .and_then(|x| x.as_f64())
@@ -132,6 +146,8 @@ impl Settings {
         o.insert("api_key".to_string(), Json::str(&self.api_key));
         o.insert("shortcut".to_string(), Json::str(&self.shortcut));
         o.insert("always_on_top".to_string(), Json::Bool(self.always_on_top));
+        o.insert("language".to_string(), Json::str(&self.language));
+        o.insert("widget_enabled".to_string(), Json::Bool(self.widget_enabled));
         o.insert(
             "settings_version".to_string(),
             Json::Num(self.settings_version as f64),
@@ -164,6 +180,8 @@ impl Settings {
         o.insert("api_key".to_string(), Json::str(&self.api_key));
         o.insert("shortcut".to_string(), Json::str(&self.shortcut));
         o.insert("always_on_top".to_string(), Json::Bool(self.always_on_top));
+        o.insert("language".to_string(), Json::str(&self.language));
+        o.insert("widget_enabled".to_string(), Json::Bool(self.widget_enabled));
         o.insert(
             "settings_version".to_string(),
             Json::Num(self.settings_version as f64),

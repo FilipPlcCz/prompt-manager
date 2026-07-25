@@ -22,6 +22,12 @@ fn main() {
 
     let shortcut_str = settings.shortcut.clone();
     let library_dir = settings.library_dir.clone();
+    // tray menu texts follow the UI language (applied on next start after a change)
+    let (tray_open, tray_folder, tray_quit) = match settings.language.as_str() {
+        "cs" => ("Otevřít správu", "Otevřít složku knihovny", "Ukončit"),
+        "de" => ("Verwaltung öffnen", "Bibliotheksordner öffnen", "Beenden"),
+        _ => ("Open manager", "Open library folder", "Quit"),
+    };
     // Built here, consumed in setup() - i.e. only after the single-instance
     // plugin has decided that this process is the one that keeps running.
     let api_cfg = if settings.api_enabled {
@@ -82,10 +88,10 @@ fn main() {
 
             // ----- tray -----
             let open_manager =
-                MenuItemBuilder::with_id("open_manager", "Otevřít správu").build(app)?;
+                MenuItemBuilder::with_id("open_manager", tray_open).build(app)?;
             let open_folder =
-                MenuItemBuilder::with_id("open_folder", "Otevřít složku knihovny").build(app)?;
-            let quit = MenuItemBuilder::with_id("quit", "Ukončit").build(app)?;
+                MenuItemBuilder::with_id("open_folder", tray_folder).build(app)?;
+            let quit = MenuItemBuilder::with_id("quit", tray_quit).build(app)?;
             let menu = MenuBuilder::new(app)
                 .items(&[&open_manager, &open_folder])
                 .separator()
@@ -166,8 +172,9 @@ fn main() {
                     .ok();
             }
 
-            // show sidebar on first launch
+            // show sidebar on first launch + the launcher widget (if enabled)
             let _ = windows::show_sidebar(&app.handle().clone());
+            windows::show_widget_if_enabled(&app.handle().clone());
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -205,6 +212,7 @@ fn main() {
             commands::open_main,
             commands::hide_sidebar,
             commands::hide_main,
+            commands::set_widget_visible,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Prompt Manager");

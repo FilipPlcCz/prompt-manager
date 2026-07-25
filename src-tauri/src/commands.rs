@@ -112,9 +112,24 @@ pub fn delete_prompt(id: String, state: State<AppState>) -> Result<(), String> {
 
 #[tauri::command]
 pub fn duplicate_prompt(id: String, state: State<AppState>) -> Result<String, String> {
-    let p = lib(&state)?
-        .duplicate_prompt(&id)
-        .map_err(|e| e.to_string())?;
+    let l = lib(&state)?;
+    let mut p = l.duplicate_prompt(&id).map_err(|e| e.to_string())?;
+    // pm-core appends a Czech " (kopie)"; localize it to the UI language
+    let lang = {
+        let s = state.settings.lock().map_err(|e| e.to_string())?;
+        s.language.clone()
+    };
+    let suffix = match lang.as_str() {
+        "cs" => None,
+        "de" => Some(" (Kopie)"),
+        _ => Some(" (copy)"),
+    };
+    if let Some(suf) = suffix {
+        if let Some(base) = p.title.strip_suffix(" (kopie)") {
+            p.title = format!("{}{}", base, suf);
+            p = l.save_prompt(&p).map_err(|e| e.to_string())?;
+        }
+    }
     Ok(p.to_json().dump())
 }
 
@@ -332,6 +347,14 @@ pub fn save_settings(settings_json: String, state: State<AppState>) -> Result<St
     if let Some(b) = v.get("always_on_top").and_then(|x| x.as_bool()) {
         s.always_on_top = b;
     }
+    if let Some(l) = v.get_str("language") {
+        if matches!(l, "en" | "cs" | "de") {
+            s.language = l.to_string();
+        }
+    }
+    if let Some(b) = v.get("widget_enabled").and_then(|x| x.as_bool()) {
+        s.widget_enabled = b;
+    }
     if v.get("regenerate_api_key").and_then(|x| x.as_bool()) == Some(true) {
         s.api_key = pm_core::util::new_token();
     }
@@ -425,6 +448,12 @@ pub fn hide_sidebar(app: AppHandle) -> Result<(), String> {
         w.hide().map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+/// Shows/hides the always-on-top launcher widget (persisted).
+#[tauri::command]
+pub fn set_widget_visible(app: AppHandle, on: bool) -> Result<(), String> {
+    crate::windows::set_widget_visible(&app, on)
 }
 
 #[tauri::command]

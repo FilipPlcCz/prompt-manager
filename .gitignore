@@ -6,3 +6,4 @@ out/
 *.tmp~
 mcp-err.txt
 TMP/
+src-tauri/Cargo.lock
