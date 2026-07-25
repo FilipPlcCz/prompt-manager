@@ -1,113 +1,134 @@
 # Prompt Manager
 
-Windows aplikace pro správu textových promptů: kompaktní **sidebar** u levého okraje obrazovky (~15 % šířky, always-on-top) pro rychlé kopírování, **plné okno** pro správu promptů a receptů, **plovoucí tlačítko** (malý always-on-top rámeček vlevo nahoře, klik zobrazí/skryje sidebar), **lokální REST API** a **MCP server** pro přístup LLM nástrojů (Claude Code, Claude Desktop…). UI je anglicky (výchozí), česky a německy — přepíná se v Nastavení.
+A Windows app for managing reusable text prompts: a compact **sidebar** docked to the left edge of the screen (~15 % of its width, always on top) for quick copying, a **full manager window** for editing prompts and recipes, a **floating launcher button**, a **local REST API**, and an **MCP server** so LLM tools (Claude Code, Claude Desktop, …) can use your prompt library too.
 
-Postaveno na **Tauri v2** (Rust + WebView2). Jádro, REST API i MCP server jsou **bez externích závislostí** (čistý Rust std) a plně pokryté testy; frontend je čisté HTML/JS bez build kroku.
+Built with **Tauri v2** (Rust + WebView2). The core, the REST API and the MCP server have **zero external dependencies** (pure Rust std) and are fully covered by tests; the frontend is plain HTML/JS with no build step. The UI is available in **English** (default), **Czech** and **German** — switchable in Settings.
 
-## Stažení
+## How it looks
 
-Hotové buildy jsou na stránce [Releases](../../releases/latest):
+### Manager window
 
-- `Prompt Manager_<verze>_x64-setup.exe` — instalátor (doporučeno)
-- `PromptManager-portable.exe` — samostatné .exe bez instalace
+Edit prompts, insert `{{variables}}` with one click, and assign recipes:
 
-Vyžaduje Windows 10/11 s WebView2 runtime (Windows 11 ho má; instalátor si ho případně stáhne sám).
+![Manager window](docs/main-window.png)
 
-## Pojmy
+### Sidebar
 
-- **Prompt** – název + obsah s placeholdery `{{nazev_promenne}}` + přiřazené recepty.
-- **Recept** – samostatná pojmenovaná sada proměnných (`nazev → hodnota`). Spravuje se centrálně v sekci *Recepty* a přiřazuje se k libovolnému počtu promptů.
-- **Proměnné** – odvozená množina: sjednocení proměnných ze všech receptů. Horní lišta chipů se plní automaticky; kliknutí na chip vloží `{{nazev}}` na pozici kurzoru v obsahu promptu (v sekci Recepty skočí na příslušné pole), přetažení dělá totéž na místo, kam chip pustíte.
-- **Kopírování** – v sidebaru má každý prompt rozbalovací výběr receptu; tlačítko Copy zkopíruje text vyplněný zvoleným receptem (nebo raw). **Shift+klik** na Copy přidá prompt do schránky za předchozí — držením Shiftu tak lze naklikat několik promptů za sebe do jednoho vložení.
+One row per prompt: pick a recipe in the badge, hit the copy button, paste anywhere. Shift+click chains several prompts into one clipboard paste:
 
-## Struktura repozitáře
+<img src="docs/sidebar.png" width="360" alt="Sidebar">
+
+### Floating launcher
+
+A small always-on-top pill. Click it to open the sidebar; press-and-drag to move it anywhere (the position is remembered). It hides automatically while the sidebar is in front:
+
+<img src="docs/launcher.png" width="60" alt="Floating launcher">
+
+## Download
+
+Ready-made builds are on the [Releases](../../releases/latest) page:
+
+- `Prompt Manager_<version>_x64-setup.exe` — installer (recommended)
+- `PromptManager-portable.exe` — standalone .exe, no installation
+
+Requires Windows 10/11 with the WebView2 runtime (Windows 11 ships it; the installer downloads it if needed).
+
+## Concepts
+
+- **Prompt** — a name + content with `{{variable_name}}` placeholders + assigned recipes.
+- **Recipe** — a named set of variable values (`name → value`). Managed centrally in the *Recipes* section and assignable to any number of prompts.
+- **Variables** — a derived set: the union of variables across all recipes. The chip bar at the top fills itself; clicking a chip inserts `{{name}}` at the caret in the prompt editor (in the Recipes section it jumps to the matching value field), dragging does the same at the drop position.
+- **Copying** — in the sidebar every prompt has a recipe picker; the copy button copies the text filled in with the selected recipe (or raw). **Shift+click** on copy appends the prompt after the previous one — hold Shift and click through several prompts to build one combined clipboard paste.
+
+## Repository layout
 
 ```
-pm-core/     jádro: modely, souborové úložiště, render engine (0 závislostí, 34+ testů)
-pm-api/      lokální REST API, ručně psaný HTTP server na 127.0.0.1 (0 závislostí, testy)
-pm-mcp/      MCP server (stdio, JSON-RPC 2.0) -> binárka prompt-manager-mcp (0 závislostí, testy)
-src-tauri/   Tauri aplikace: okna, tray, zkratka, clipboard, watcher, commands
-dist/        frontend (jeden soubor index.html, bez build kroku; v prohlížeči běží s mock backendem)
-.github/     CI: testy + Windows build (portable .exe + NSIS installer)
+pm-core/     core: models, file storage, render engine (0 dependencies, 34+ tests)
+pm-api/      local REST API, hand-written HTTP server on 127.0.0.1 (0 dependencies, tests)
+pm-mcp/      MCP server (stdio, JSON-RPC 2.0) -> prompt-manager-mcp binary (0 dependencies, tests)
+src-tauri/   Tauri app: windows, tray, shortcut, clipboard, watcher, commands
+dist/        frontend (a single index.html, no build step; runs in a browser with a mock backend)
+docs/        screenshots for this README
+.github/     CI: tests + Windows build (portable .exe + NSIS installer)
 ```
 
-## Build na Windows
+## Building on Windows
 
-Prerekvizity: [Rust](https://rustup.rs), Node.js (jen kvůli `@tauri-apps/cli`), WebView2 runtime (Windows 11 už má).
+Prerequisites: [Rust](https://rustup.rs), Node.js (only for `@tauri-apps/cli`), the WebView2 runtime (Windows 11 already has it).
 
 ```powershell
 npm install -g @tauri-apps/cli
 
-# testy jádra
+# core tests
 cargo test -p pm-core -p pm-api -p pm-mcp
 
-# MCP sidecar (Tauri ho přibalí k aplikaci)
+# MCP sidecar (Tauri bundles it with the app)
 cargo build -p pm-mcp --release
 mkdir src-tauri/binaries -Force
 copy target/release/prompt-manager-mcp.exe src-tauri/binaries/prompt-manager-mcp-x86_64-pc-windows-msvc.exe
 
-# vývoj (živé okno)
+# development (live window)
 cd src-tauri
 tauri dev
 
 # release build -> portable exe + NSIS installer
 tauri build
-# vysledky: src-tauri/target/release/prompt-manager.exe (portable)
-#           src-tauri/target/release/bundle/nsis/*.exe (installer)
+# results: src-tauri/target/release/prompt-manager.exe (portable)
+#          src-tauri/target/release/bundle/nsis/*.exe (installer)
 ```
 
-CI (`.github/workflows/build.yml`) dělá totéž automaticky – stačí repozitář pushnout na GitHub a artefakty stáhnout z Actions (nebo pushnout tag `v*` pro release).
+CI (`.github/workflows/build.yml`) does the same automatically — push the repository to GitHub and grab the artifacts from Actions (or push a `v*` tag for a release).
 
-## Úložiště (přenositelné)
+## Storage (portable)
 
-Výchozí umístění `%APPDATA%/PromptManager/library/` (změnitelné v Nastavení – lze dát na OneDrive apod.):
+Default location `%APPDATA%/PromptManager/library/` (changeable in Settings — put it on OneDrive etc. if you like):
 
 ```
 library/
-├── prompts/*.md        1 prompt = 1 soubor (YAML frontmatter + obsah)
-├── recipes/*.yaml      1 recept = 1 soubor
-└── order.json          pořadí promptů
+├── prompts/*.md        1 prompt = 1 file (YAML frontmatter + content)
+├── recipes/*.yaml      1 recipe = 1 file
+└── order.json          prompt ordering
 ```
 
-Zkopírováním složky přenesete vše na jiný počítač. Aplikace hlídá složku (polling ~1,5 s) a změny zvenku se projeví automaticky.
+Copy the folder to move everything to another machine. The app watches the folder (polling ~1.5 s), so outside changes show up automatically.
 
 ## REST API
 
-`http://127.0.0.1:8737/api/v1/` (port v Nastavení), hlavička `Authorization: Bearer <api_key>` – klíč najdete v Nastavení. Endpointy: `GET/POST /prompts`, `GET/PUT/DELETE /prompts/{id}`, `PUT /prompts/order`, `POST /prompts/{id}/render` (`{"recipe_id": "...", "overrides": {...}}` → `{"text": "...", "missing": [...]}`), `GET/POST /recipes`, `GET/PUT/DELETE /recipes/{id}`, `GET /variables`.
+`http://127.0.0.1:8737/api/v1/` (port in Settings), header `Authorization: Bearer <api_key>` — the key is shown in Settings. Endpoints: `GET/POST /prompts`, `GET/PUT/DELETE /prompts/{id}`, `PUT /prompts/order`, `POST /prompts/{id}/render` (`{"recipe_id": "...", "overrides": {...}}` → `{"text": "...", "missing": [...]}`), `GET/POST /recipes`, `GET/PUT/DELETE /recipes/{id}`, `GET /variables`.
 
 ## MCP server (Claude Code / Claude Desktop)
 
-Binárka `prompt-manager-mcp.exe` (stdio). Konfigurační snippet zkopírujete v Nastavení aplikace, nebo ručně:
+The `prompt-manager-mcp.exe` binary (stdio). Copy the config snippet from the app's Settings, or write it by hand:
 
 ```json
 {
   "mcpServers": {
     "prompt-manager": {
-      "command": "C:\\cesta\\k\\prompt-manager-mcp.exe",
+      "command": "C:\\path\\to\\prompt-manager-mcp.exe",
       "args": ["--library", "C:\\Users\\...\\AppData\\Roaming\\PromptManager\\library"]
     }
   }
 }
 ```
 
-Tools: `list_prompts`, `get_prompt`, `render_prompt(id|nazev, recipe?)`, `create_prompt`, `update_prompt`, `delete_prompt`, `list_recipes`, `get_recipe`, `create_recipe`, `update_recipe`, `list_variables`. Prompt i recept lze adresovat názvem.
+Tools: `list_prompts`, `get_prompt`, `render_prompt(id|name, recipe?)`, `create_prompt`, `update_prompt`, `delete_prompt`, `list_recipes`, `get_recipe`, `create_recipe`, `update_recipe`, `list_variables`. Prompts and recipes can be addressed by name.
 
-## Ovládání
+## Controls
 
-- Tray ikona: levý klik = zobrazit/skrýt sidebar, pravý klik = menu.
-- Globální zkratka `Ctrl+Alt+P` (změna v Nastavení, projeví se po restartu).
-- Sidebar: ⋮⋮ úchyt = přetažení pořadí; select pod názvem = recept pro kopírování; ikona ↗ = plné okno; ikona ⊙ = zobrazit/skrýt plovoucí tlačítko.
-- Plovoucí tlačítko (nad všemi okny): klik = zobrazit sidebar; tažením myší ho přemístíte kamkoliv (pozice se pamatuje). Při zobrazeném sidebaru se tlačítko samo schová.
-- Zavření okna aplikaci neukončí (běží v tray); Ukončit je v tray menu.
+- Tray icon: left click = show/hide the sidebar, right click = menu.
+- Global shortcut `Ctrl+Alt+P` (change it in Settings, applied after restart).
+- Sidebar: ⋮⋮ grip = drag to reorder; the badge next to the name = recipe used for copying; ↗ icon = full manager window; ⊙ icon = show/hide the floating launcher.
+- Floating launcher (above all windows): click = open the sidebar; drag to move it anywhere (the position is remembered). It hides while the sidebar is in front, and clicking it while the sidebar is buried under another window brings the sidebar forward.
+- Closing a window does not quit the app (it lives in the tray); Quit is in the tray menu.
 
-## Známá omezení v1 (kandidáti na v1.1)
+## Known limitations (candidates for future versions)
 
-- Změna API portu/zkratky/složky knihovny se projeví až po restartu aplikace.
-- Editor obsahu je prostý textarea (placeholdery se zvýrazňují pod ním a v náhledu, ne přímo v textu).
-- Export/import výběru promptů zatím jen kopírováním složky `library/`.
-- Světlé téma zatím není.
-- Windows: první spuštění může vyžadovat instalaci WebView2 runtime (installer to řeší).
+- Changing the API port / shortcut / library folder takes effect after an app restart.
+- The content editor is a plain textarea (placeholders are highlighted below it, not inline).
+- Export/import of a prompt selection is done by copying the `library/` folder.
+- No light theme yet.
+- Windows: the first run may require installing the WebView2 runtime (the installer handles it).
 
-## Licence
+## License
 
 MIT
