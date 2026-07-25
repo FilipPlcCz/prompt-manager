@@ -52,7 +52,13 @@ pub fn toggle_sidebar(app: &AppHandle) -> Result<(), String> {
         .get_webview_window("sidebar")
         .ok_or("sidebar window missing")?;
     if win.is_visible().map_err(|e| e.to_string())? {
-        win.hide().map_err(|e| e.to_string())?;
+        // visible but buried behind another window: bring it forward instead
+        // of hiding - that is what a click on the launcher pill means there
+        if !win.is_focused().unwrap_or(false) {
+            win.set_focus().map_err(|e| e.to_string())?;
+        } else {
+            win.hide().map_err(|e| e.to_string())?;
+        }
     } else {
         // show BEFORE positioning: WebView2 does not re-layout the page of a
         // hidden window, so resizing first left the content at the old height
@@ -110,12 +116,13 @@ pub fn position_widget(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
-/// The launcher pill stands in for the hidden sidebar: it is visible only
-/// while the sidebar is hidden AND the user has not switched it off.
+/// The launcher pill stands in for the sidebar whenever the sidebar is not
+/// actually in front of the user: hidden, or visible but behind another
+/// window (unfocused). Switched off entirely via widget_enabled.
 pub fn widget_sync(app: &AppHandle) {
     let sidebar_visible = app
         .get_webview_window("sidebar")
-        .and_then(|w| w.is_visible().ok())
+        .map(|w| w.is_visible().unwrap_or(false) && w.is_focused().unwrap_or(false))
         .unwrap_or(false);
     let enabled = {
         let state = app.state::<crate::commands::AppState>();

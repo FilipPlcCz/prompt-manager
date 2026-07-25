@@ -187,6 +187,13 @@ fn main() {
                         windows::widget_sync(&window.app_handle().clone());
                     }
                 }
+                // pill follows the sidebar's focus: visible whenever the
+                // sidebar is not in front (hidden OR behind another window)
+                tauri::WindowEvent::Focused(_) => {
+                    if window.label() == "sidebar" {
+                        windows::widget_sync(&window.app_handle().clone());
+                    }
+                }
                 // remember where the user dragged the launcher pill
                 tauri::WindowEvent::Moved(p) => {
                     if window.label() == "widget" && window.is_visible().unwrap_or(false) {
