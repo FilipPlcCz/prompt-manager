@@ -44,6 +44,8 @@ pub fn set_always_on_top(app: &AppHandle, on: bool) -> Result<(), String> {
     if let Some(win) = app.get_webview_window("sidebar") {
         win.set_always_on_top(on).map_err(|e| e.to_string())?;
     }
+    // the pin changes what "sidebar is in front" means for the pill
+    widget_sync(app);
     Ok(())
 }
 
@@ -117,21 +119,25 @@ pub fn position_widget(app: &AppHandle) -> Result<(), String> {
 }
 
 /// The launcher pill stands in for the sidebar whenever the sidebar is not
-/// actually in front of the user: hidden, or visible but behind another
-/// window (unfocused). Switched off entirely via widget_enabled.
+/// actually in front of the user. A pinned (always-on-top) sidebar is on
+/// screen even without focus, so the pill must never cover it; an unpinned
+/// one counts as "in front" only while focused - once another window buries
+/// it, the pill comes back. Switched off entirely via widget_enabled.
 pub fn widget_sync(app: &AppHandle) {
-    let sidebar_visible = app
-        .get_webview_window("sidebar")
-        .map(|w| w.is_visible().unwrap_or(false) && w.is_focused().unwrap_or(false))
-        .unwrap_or(false);
-    let enabled = {
+    let (enabled, pinned) = {
         let state = app.state::<crate::commands::AppState>();
         state
             .settings
             .lock()
-            .map(|s| s.widget_enabled)
-            .unwrap_or(true)
+            .map(|s| (s.widget_enabled, s.always_on_top))
+            .unwrap_or((true, true))
     };
+    let sidebar_visible = app
+        .get_webview_window("sidebar")
+        .map(|w| {
+            w.is_visible().unwrap_or(false) && (pinned || w.is_focused().unwrap_or(false))
+        })
+        .unwrap_or(false);
     if let Some(win) = app.get_webview_window("widget") {
         if enabled && !sidebar_visible {
             let _ = win.show();
