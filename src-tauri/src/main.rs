@@ -192,8 +192,11 @@ fn main() {
                     if window.label() == "widget" && window.is_visible().unwrap_or(false) {
                         let scale = window.scale_factor().unwrap_or(1.0);
                         let l: tauri::LogicalPosition<f64> = p.to_logical(scale);
+                        // guard as its own local: the Result temporary of an
+                        // if-let would outlive `state` (E0597, same as the tray)
                         let state = window.app_handle().state::<AppState>();
-                        if let Ok(mut s) = state.settings.lock() {
+                        let guard = state.settings.lock();
+                        if let Ok(mut s) = guard {
                             if s.widget_x != Some(l.x) || s.widget_y != Some(l.y) {
                                 s.widget_x = Some(l.x);
                                 s.widget_y = Some(l.y);
