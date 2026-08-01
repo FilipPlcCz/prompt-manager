@@ -115,6 +115,13 @@ pub fn position_widget(app: &AppHandle) -> Result<(), String> {
     };
     win.set_position(LogicalPosition::new(x, y))
         .map_err(|e| e.to_string())?;
+    // Re-assert the pill size at runtime. Without an explicit minimum size the
+    // window is created at Windows' default minimum track width (~133 px),
+    // leaving a wide transparent dead-zone right of the icon that swallows
+    // clicks meant for the apps behind it. minWidth in tauri.conf.json lifts
+    // that floor; setting the size here makes 24x54 stick on every show.
+    win.set_size(LogicalSize::new(24.0, 54.0))
+        .map_err(|e| e.to_string())?;
     win.set_always_on_top(true).map_err(|e| e.to_string())?;
     Ok(())
 }
