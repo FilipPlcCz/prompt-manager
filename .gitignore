@@ -3,6 +3,7 @@ src-tauri/target/
 src-tauri/binaries/
 src-tauri/gen/schemas/
 out/
+out*/
 *.tmp~
 mcp-err.txt
 TMP/
