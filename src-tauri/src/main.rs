@@ -188,10 +188,28 @@ fn main() {
                     }
                 }
                 // pill follows the sidebar's focus: visible whenever the
-                // sidebar is not in front (hidden OR behind another window)
-                tauri::WindowEvent::Focused(_) => {
+                // sidebar is not in front (hidden OR behind another window).
+                // When unpinned, losing focus also HIDES the sidebar entirely
+                // (auto-hide flyout, like the Start menu) - only the pill stays.
+                tauri::WindowEvent::Focused(focused) => {
                     if window.label() == "sidebar" {
-                        windows::widget_sync(&window.app_handle().clone());
+                        let app = window.app_handle().clone();
+                        if !*focused {
+                            // read the pin in its own scope so the guard does
+                            // not outlive the borrow (E0597, as in the tray)
+                            let pinned = {
+                                let state = app.state::<AppState>();
+                                state
+                                    .settings
+                                    .lock()
+                                    .map(|s| s.always_on_top)
+                                    .unwrap_or(true)
+                            };
+                            if !pinned {
+                                let _ = window.hide();
+                            }
+                        }
+                        windows::widget_sync(&app);
                     }
                 }
                 // remember where the user dragged the launcher pill

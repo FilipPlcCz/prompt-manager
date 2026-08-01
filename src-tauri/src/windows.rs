@@ -106,9 +106,10 @@ pub fn position_widget(app: &AppHandle) -> Result<(), String> {
     let pos_l: LogicalPosition<f64> = area.position.to_logical(scale);
     let size_l: LogicalSize<f64> = area.size.to_logical(scale);
     let (x, y) = match (wx, wy) {
+        // keep the whole pill on-screen (window is 24 x 54 logical px)
         (Some(x), Some(y)) => (
-            x.clamp(pos_l.x, pos_l.x + size_l.width - 40.0),
-            y.clamp(pos_l.y, pos_l.y + size_l.height - 30.0),
+            x.clamp(pos_l.x, pos_l.x + size_l.width - 30.0),
+            y.clamp(pos_l.y, pos_l.y + size_l.height - 60.0),
         ),
         _ => (pos_l.x + 6.0, pos_l.y + 110.0),
     };
